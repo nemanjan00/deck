@@ -65,6 +65,75 @@ impl WaterfallBuf {
     }
 }
 
+/// A detected band peak (waterfall signal browser).
+pub struct Peak {
+    pub hz: u64,
+    pub db: f32,
+    pub last: Instant,
+}
+
+/// Find/refresh peaks in a band spectrum: local maxima above the noise
+/// floor, minimum separation, DC-spike and edge bins excluded, matched to
+/// existing entries for a stable list.
+pub fn update_peaks(peaks: &mut Vec<Peak>, spec: &[f32], center_hz: u64, rate: u32, now: Instant) {
+    let n = spec.len();
+    if n < 32 || rate == 0 {
+        return;
+    }
+    let bin_hz = f64::from(rate) / n as f64;
+    let mut sorted = spec.to_vec();
+    sorted.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+    let floor = sorted[n / 2];
+    let thresh = floor + 8.0;
+
+    let mut found: Vec<(usize, f32)> = Vec::new();
+    for i in 8..n - 8 {
+        // the offset-tuning DC spike sits mid-display — not a signal
+        if i.abs_diff(n / 2) <= 2 {
+            continue;
+        }
+        let v = spec[i];
+        if v > thresh
+            && v >= spec[i - 1]
+            && v >= spec[i + 1]
+            && v > spec[i - 2]
+            && v > spec[i + 2]
+        {
+            found.push((i, v));
+        }
+    }
+    // strongest first, enforce minimum separation (~10 bins)
+    found.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+    let mut kept: Vec<(usize, f32)> = Vec::new();
+    for (i, v) in found {
+        if kept.iter().all(|(k, _)| k.abs_diff(i) >= 10) {
+            kept.push((i, v));
+        }
+        if kept.len() >= 16 {
+            break;
+        }
+    }
+
+    let low_edge = center_hz as f64 - f64::from(rate) / 2.0;
+    for (i, v) in kept {
+        let hz = (low_edge + (i as f64 + 0.5) * bin_hz).max(0.0) as u64;
+        match peaks
+            .iter_mut()
+            .find(|p| p.hz.abs_diff(hz) < (bin_hz * 3.0) as u64)
+        {
+            Some(p) => {
+                p.db = 0.6 * p.db + 0.4 * v;
+                p.hz = (p.hz + hz) / 2;
+                p.last = now;
+            }
+            None => peaks.push(Peak { hz, db: v, last: now }),
+        }
+    }
+    peaks.retain(|p| now.duration_since(p.last) < Duration::from_secs(6));
+    peaks.sort_by(|a, b| b.db.partial_cmp(&a.db).unwrap_or(std::cmp::Ordering::Equal));
+    peaks.truncate(12);
+}
+
 pub struct LiveCall {
     pub fields: CallFields,
     pub started: Instant,
@@ -91,6 +160,7 @@ pub struct Stores {
     pub audio_spec: Vec<f32>,
     pub audio_peak: Vec<f32>,
     pub band_spec: Vec<f32>,
+    pub peaks: Vec<Peak>,
     pub wf_audio: WaterfallBuf,
     pub wf_band: WaterfallBuf,
     pub decoded: u64,
@@ -117,6 +187,7 @@ impl Stores {
             audio_spec: Vec::new(),
             audio_peak: Vec::new(),
             band_spec: Vec::new(),
+            peaks: Vec::new(),
             wf_audio: WaterfallBuf::new(512),
             wf_band: WaterfallBuf::new(512),
             decoded: 0,
@@ -565,7 +636,7 @@ impl Session {
             let Some(r) = &self.running else {
                 continue;
             };
-            let (run, mode) = (r.run, r.mode);
+            let (run, mode, center_hz, rate) = (r.run, r.mode, r.center_hz, r.rate);
             match ev {
                 AppEvent::Line { run: er, src, text } if er == run => {
                     self.apply_line(mode, src, text);
@@ -585,6 +656,9 @@ impl Session {
                 }
                 AppEvent::Iq { run: er, spec } if er == run => {
                     self.stores.wf_band.push(&spec, -80.0, 0.0);
+                    if mode == ModeId::Waterfall {
+                        update_peaks(&mut self.stores.peaks, &spec, center_hz, rate, now);
+                    }
                     self.stores.band_spec = spec;
                 }
                 AppEvent::SbsStatus { run: er, note } if er == run => {
@@ -872,6 +946,33 @@ mod tests {
         assert_eq!(wf.rows.len(), 3);
         assert_eq!(wf.rows[0][1], 255);
         assert!(wf.rows[2][0] < 128);
+    }
+
+    #[test]
+    fn peaks_found_and_dc_excluded() {
+        let now = Instant::now();
+        let n = 1024;
+        let mut spec = vec![-80.0f32; n];
+        // signal at bin 300, another at 700, fake DC spike at center
+        for (c, h) in [(300usize, 35.0f32), (700, 25.0)] {
+            for d in 0..3 {
+                spec[c - d] = -80.0 + h - d as f32 * 3.0;
+                spec[c + d] = -80.0 + h - d as f32 * 3.0;
+            }
+        }
+        spec[n / 2] = -20.0; // DC spike
+        let mut peaks = Vec::new();
+        update_peaks(&mut peaks, &spec, 433_920_000, 2_400_000, now);
+        assert_eq!(peaks.len(), 2, "two real peaks, DC excluded");
+        // strongest first
+        assert!(peaks[0].db > peaks[1].db);
+        // bin 300 → 433.92M − 1.2M + 300.5*2343.75 ≈ 433.424 MHz
+        let expect = 433_920_000f64 - 1_200_000.0 + 300.5 * (2_400_000.0 / 1024.0);
+        assert!(
+            (peaks[0].hz as f64 - expect).abs() < 5_000.0,
+            "peak hz {} vs {expect}",
+            peaks[0].hz
+        );
     }
 
     #[test]

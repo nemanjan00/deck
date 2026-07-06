@@ -126,6 +126,18 @@ fn demo_app(scene: &str, dark: bool) -> DeckApp {
             ui.freq.hz = 433_920_000;
             fake_running(&mut app, ModeId::Waterfall, 433_920_000);
             fill_band(&mut app, 9);
+            for (hz, db) in [
+                (433_920_000u64, -28.0f32),
+                (434_213_000, -39.0),
+                (433_437_000, -44.0),
+                (434_775_000, -52.0),
+            ] {
+                app.session.stores.peaks.push(crate::session::Peak {
+                    hz,
+                    db,
+                    last: Instant::now(),
+                });
+            }
         }
         "dmr" => {
             let ui = app.mode_ui(ModeId::Dmr);

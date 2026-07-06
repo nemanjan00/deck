@@ -46,6 +46,9 @@ pub struct ModeUi {
     pub show_log: bool,
     pub preset_open: bool,
     pub preset_sel: usize,
+    /// "open this frequency in another mode" picker (waterfall hand-off)
+    pub openin_open: bool,
+    pub openin_sel: usize,
     pub ctl_drag: f32,
 }
 
@@ -65,6 +68,8 @@ impl ModeUi {
             show_log: false,
             preset_open: false,
             preset_sel: 0,
+            openin_open: false,
+            openin_sel: 0,
             ctl_drag: 0.0,
         }
     }
@@ -226,6 +231,13 @@ impl DeckApp {
 
     pub fn running_mode(&self) -> Option<ModeId> {
         self.session.running.as_ref().map(|r| r.mode)
+    }
+
+    /// Switch to a mode screen (seeding its UI state) with input cooldown.
+    pub fn goto_mode(&mut self, m: ModeId) {
+        let _ = self.mode_ui(m);
+        self.screen = Screen::Mode(m);
+        self.nav_cooldown = 1;
     }
 }
 

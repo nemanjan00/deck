@@ -30,6 +30,8 @@ pub enum Ctl {
     Viz,
     Pause,
     Log,
+    /// waterfall hand-off: open the tuned frequency in another mode
+    OpenIn,
 }
 
 fn controls_for(mode: ModeId) -> Vec<Ctl> {
@@ -59,15 +61,37 @@ fn controls_for(mode: ModeId) -> Vec<Ctl> {
         if mode == ModeId::Scanner {
             v.push(Ctl::Pause);
         }
+        if mode == ModeId::Waterfall {
+            v.push(Ctl::OpenIn);
+        }
     }
     v.push(Ctl::Log);
     v
 }
 
+/// Modes a waterfall frequency can be handed off to.
+pub fn openin_candidates() -> Vec<ModeId> {
+    crate::modes::MODES
+        .iter()
+        .filter(|m| {
+            !matches!(
+                m.id,
+                ModeId::Waterfall | ModeId::Scanner | ModeId::Adsb
+            )
+        })
+        .map(|m| m.id)
+        .collect()
+}
+
 fn has_list(view: ViewKind) -> bool {
     matches!(
         view,
-        ViewKind::Pager | ViewKind::Aprs | ViewKind::Adsb | ViewKind::Scanner | ViewKind::Voice
+        ViewKind::Pager
+            | ViewKind::Aprs
+            | ViewKind::Adsb
+            | ViewKind::Scanner
+            | ViewKind::Voice
+            | ViewKind::Waterfall
     )
 }
 
@@ -88,6 +112,7 @@ fn ctl_label(c: Ctl) -> &'static str {
         Ctl::Viz => "VIZ",
         Ctl::Pause => "SCAN",
         Ctl::Log => "LOG",
+        Ctl::OpenIn => "OPEN IN",
     }
 }
 
@@ -166,6 +191,9 @@ fn ctl_value(app: &DeckApp, mode: ModeId, c: Ctl) -> String {
             "hidden"
         }
         .into(),
+        Ctl::OpenIn => ui
+            .map(|u| format!("{} >", crate::freq::fmt_short(u.freq.hz)))
+            .unwrap_or_else(|| ">".into()),
     }
 }
 
@@ -263,9 +291,27 @@ fn activate(app: &mut DeckApp, mode: ModeId, c: Ctl) {
             let ui = app.mode_ui(mode);
             ui.show_log = !ui.show_log;
         }
+        Ctl::OpenIn => {
+            let ui = app.mode_ui(mode);
+            ui.openin_open = true;
+            ui.openin_sel = 0;
+        }
         Ctl::Notch | Ctl::Mon | Ctl::Det => adjust(app, mode, c, 1),
         _ => adjust(app, mode, c, 1),
     }
+}
+
+/// Stop the current session and re-open `hz` in `target` (auto-starts RX).
+fn open_in(app: &mut DeckApp, target: ModeId, hz: u64) {
+    app.stop_rx();
+    {
+        let u = app.mode_ui(target);
+        u.freq.hz = hz.min(crate::freq::MAX_HZ);
+        u.mp.freq = u.freq.hz;
+        u.focus = 0;
+    }
+    app.goto_mode(target);
+    app.start_rx(target);
 }
 
 fn schedule_retune(app: &mut DeckApp, mode: ModeId) {
@@ -315,6 +361,30 @@ pub fn keys(
         }
         None
     });
+
+    // open-in popup layer (waterfall hand-off)
+    if app.mode_ui(mode).openin_open {
+        let candidates = openin_candidates();
+        let hz = app.mode_ui(mode).freq.hz;
+        let ui = app.mode_ui(mode);
+        if up {
+            ui.openin_sel = ui.openin_sel.saturating_sub(1);
+        }
+        if down {
+            ui.openin_sel = (ui.openin_sel + 1).min(candidates.len().saturating_sub(1));
+        }
+        if esc {
+            ui.openin_open = false;
+        }
+        if enter {
+            let sel = ui.openin_sel;
+            ui.openin_open = false;
+            if let Some(target) = candidates.get(sel) {
+                open_in(app, *target, hz);
+            }
+        }
+        return;
+    }
 
     // preset popup layer
     if app.mode_ui(mode).preset_open {
@@ -443,6 +513,7 @@ fn list_keys(
         ViewKind::Adsb => app.session.stores.aircraft.len(),
         ViewKind::Scanner => app.session.scan.channels.len(),
         ViewKind::Voice => app.session.stores.call_history.len(),
+        ViewKind::Waterfall => app.session.stores.peaks.len(),
         _ => 0,
     };
     let ui = app.mode_ui(mode);
@@ -490,6 +561,22 @@ fn list_keys(
                 }
             }
         }
+        ViewKind::Waterfall => {
+            let hz = app.session.stores.peaks.get(sel).map(|p| p.hz);
+            if let Some(hz) = hz {
+                if enter {
+                    app.mode_ui(mode).freq.hz = hz;
+                    schedule_retune(app, mode);
+                }
+                if right {
+                    let u = app.mode_ui(mode);
+                    u.freq.hz = hz;
+                    u.openin_open = true;
+                    u.openin_sel = 0;
+                    u.list_mode = false;
+                }
+            }
+        }
         ViewKind::Scanner => {
             if enter {
                 app.session.scan.cur = sel;
@@ -531,6 +618,8 @@ pub fn draw(app: &mut DeckApp, ctx: &egui::Context, mode: ModeId) {
         "left/right digit · up/down value · OK done"
     } else if app.mode_ui(mode).list_mode {
         "up/down select · OK open/jump · RIGHT lockout · BACK controls"
+    } else if mode == ModeId::Waterfall {
+        "drag to tune · double-tap a signal (or OPEN IN) to hand off"
     } else {
         "up/down focus · left/right adjust · OK toggle · BACK menu"
     };
@@ -564,6 +653,7 @@ pub fn draw(app: &mut DeckApp, ctx: &egui::Context, mode: ModeId) {
         });
 
     draw_preset_popup(app, ctx, mode, &th);
+    draw_openin_popup(app, ctx, mode, &th);
     if app.mode_ui(mode).show_log {
         draw_log(app, ctx, &th);
     }
@@ -675,6 +765,7 @@ fn draw_left(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, com
             ViewKind::Adsb => app.session.stores.aircraft.len(),
             ViewKind::Scanner => app.session.scan.channels.len(),
             ViewKind::Voice => app.session.stores.call_history.len(),
+            ViewKind::Waterfall => app.session.stores.peaks.len(),
             _ => 0,
         };
         let resp = widgets::control_row(
@@ -704,7 +795,7 @@ fn draw_right(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
     // ---- viz ----
     let viz_h = match view {
         ViewKind::Audio => (avail_h * 0.52).clamp(120.0, 420.0),
-        ViewKind::Waterfall => avail_h - 8.0,
+        ViewKind::Waterfall => (avail_h * 0.62).max(160.0),
         ViewKind::Adsb => 0.0,
         _ => 92.0,
     };
@@ -721,7 +812,86 @@ fn draw_right(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
         ViewKind::Adsb => draw_adsb(app, ui, th),
         ViewKind::TextFeed => draw_textfeed(app, ui, th),
         ViewKind::Scanner => draw_scanner(app, ui, mode, th),
-        ViewKind::Waterfall => {}
+        ViewKind::Waterfall => draw_peaks(app, ui, mode, th),
+    }
+}
+
+/// The waterfall's signal browser: detected peaks, strongest first.
+/// OK/tap = tune to it · RIGHT = open in another mode.
+fn draw_peaks(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
+    let sel = app.mode_ui(mode).list_sel;
+    let in_list = app.mode_ui(mode).list_mode;
+    let tuned = app.mode_ui(mode).freq.hz;
+    let mut tune: Option<u64> = None;
+    let mut handoff: Option<u64> = None;
+    ui.label(
+        RichText::new("PEAKS · OK tune · RIGHT open in mode")
+            .size(10.5)
+            .color(th.text_faint),
+    );
+    egui::ScrollArea::vertical()
+        .id_salt("peaks")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            if app.session.stores.peaks.is_empty() {
+                ui.label(RichText::new("listening for signals…").color(th.text_faint));
+            }
+            let peaks: Vec<(u64, f32, f32)> = app
+                .session
+                .stores
+                .peaks
+                .iter()
+                .map(|p| (p.hz, p.db, p.last.elapsed().as_secs_f32()))
+                .collect();
+            for (i, (hz, db, age)) in peaks.iter().enumerate() {
+                ui.horizontal(|ui| {
+                    let selected = in_list && i == sel;
+                    let near_tuned = hz.abs_diff(tuned) < 6_000;
+                    let mark = if near_tuned { ">" } else { " " };
+                    let line = format!(
+                        "{mark} {:>13}  {:>5.0} dB",
+                        crate::freq::fmt_short(*hz),
+                        db
+                    );
+                    let color = if *age < 1.5 { th.text } else { th.text_dim };
+                    let resp = ui.add(
+                        egui::Label::new(
+                            RichText::new(line)
+                                .font(FontId::monospace(14.0))
+                                .color(if selected { th.sel_fg } else { color })
+                                .background_color(if selected {
+                                    th.sel_bg
+                                } else {
+                                    egui::Color32::TRANSPARENT
+                                }),
+                        )
+                        .sense(Sense::click()),
+                    );
+                    if resp.clicked() {
+                        tune = Some(*hz);
+                    }
+                    let open = ui.add(
+                        egui::Button::new(
+                            RichText::new("open >").size(11.5).color(th.accent2),
+                        )
+                        .small()
+                        .frame(false),
+                    );
+                    if open.clicked() {
+                        handoff = Some(*hz);
+                    }
+                });
+            }
+        });
+    if let Some(hz) = tune {
+        app.mode_ui(mode).freq.hz = hz;
+        schedule_retune(app, mode);
+    }
+    if let Some(hz) = handoff {
+        let u = app.mode_ui(mode);
+        u.freq.hz = hz;
+        u.openin_open = true;
+        u.openin_sel = 0;
     }
 }
 
@@ -795,6 +965,11 @@ fn handle_band_drag(app: &mut DeckApp, mode: ModeId, resp: &egui::Response, runn
     let rate = r.rate as f64;
     let center = r.center_hz as f64;
     let w = resp.rect.width() as f64;
+    if resp.double_clicked() && mode == ModeId::Waterfall {
+        let u = app.mode_ui(mode);
+        u.openin_open = true;
+        u.openin_sel = 0;
+    }
     if resp.dragged() {
         let dhz = -resp.drag_delta().x as f64 / w * rate;
         let cur = app.mode_ui(mode).freq.hz as f64;
@@ -1335,6 +1510,81 @@ fn draw_preset_popup(app: &mut DeckApp, ctx: &egui::Context, mode: ModeId, th: &
     }
     if close {
         app.mode_ui(mode).preset_open = false;
+    }
+}
+
+fn draw_openin_popup(app: &mut DeckApp, ctx: &egui::Context, mode: ModeId, th: &Theme) {
+    if !app.mode_ui(mode).openin_open {
+        return;
+    }
+    let hz = app.mode_ui(mode).freq.hz;
+    let candidates = openin_candidates();
+    let sel = app.mode_ui(mode).openin_sel;
+    let mut chosen: Option<ModeId> = None;
+    let mut close = false;
+    egui::Area::new(egui::Id::new("openin"))
+        .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
+        .show(ctx, |ui| {
+            egui::Frame::none()
+                .fill(th.panel)
+                .stroke(Stroke::new(1.0, th.outline))
+                .rounding(10.0)
+                .inner_margin(12.0)
+                .show(ui, |ui| {
+                    ui.label(
+                        RichText::new(format!(
+                            "OPEN {} IN",
+                            crate::freq::fmt_short(hz)
+                        ))
+                        .size(11.0)
+                        .color(th.text_faint),
+                    );
+                    for (i, id) in candidates.iter().enumerate() {
+                        let def = mode_def(*id);
+                        let selected = i == sel;
+                        let blocked = app
+                            .support
+                            .get(id)
+                            .cloned()
+                            .flatten()
+                            .is_some();
+                        let line = format!("{:<8} {}", def.label, def.desc);
+                        let color = if selected {
+                            th.sel_fg
+                        } else if blocked {
+                            th.text_faint
+                        } else {
+                            th.text
+                        };
+                        let resp = ui.add(
+                            egui::Label::new(
+                                RichText::new(line)
+                                    .font(FontId::monospace(13.5))
+                                    .color(color)
+                                    .background_color(if selected {
+                                        th.sel_bg
+                                    } else {
+                                        egui::Color32::TRANSPARENT
+                                    }),
+                            )
+                            .sense(Sense::click()),
+                        );
+                        if resp.clicked() {
+                            chosen = Some(*id);
+                        }
+                    }
+                    ui.add_space(6.0);
+                    if ui.button("close").clicked() {
+                        close = true;
+                    }
+                });
+        });
+    if let Some(target) = chosen {
+        app.mode_ui(mode).openin_open = false;
+        open_in(app, target, hz);
+    }
+    if close {
+        app.mode_ui(mode).openin_open = false;
     }
 }
 
