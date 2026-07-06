@@ -44,7 +44,12 @@ fn sample(t: &Tex, u: f32, v: f32) -> Color32 {
     let px = |x: usize, y: usize| t.pixels[y * t.size[0] + x];
     let lerp = |a: Color32, b: Color32, f: f32| {
         let l = |a: u8, b: u8| (f32::from(a) + (f32::from(b) - f32::from(a)) * f) as u8;
-        Color32::from_rgba_premultiplied(l(a.r(), b.r()), l(a.g(), b.g()), l(a.b(), b.b()), l(a.a(), b.a()))
+        Color32::from_rgba_premultiplied(
+            l(a.r(), b.r()),
+            l(a.g(), b.g()),
+            l(a.b(), b.b()),
+            l(a.a(), b.a()),
+        )
     };
     let top = lerp(px(x0, y0), px(x1, y0), fx);
     let bot = lerp(px(x0, y1), px(x1, y1), fx);
@@ -53,7 +58,12 @@ fn sample(t: &Tex, u: f32, v: f32) -> Color32 {
 
 fn mul(a: Color32, b: Color32) -> Color32 {
     let m = |x: u8, y: u8| ((u16::from(x) * u16::from(y)) / 255) as u8;
-    Color32::from_rgba_premultiplied(m(a.r(), b.r()), m(a.g(), b.g()), m(a.b(), b.b()), m(a.a(), b.a()))
+    Color32::from_rgba_premultiplied(
+        m(a.r(), b.r()),
+        m(a.g(), b.g()),
+        m(a.b(), b.b()),
+        m(a.a(), b.a()),
+    )
 }
 
 /// Render `frames` UI passes and rasterize the last one.
@@ -133,8 +143,10 @@ pub fn render_rgba(
                         continue;
                     }
                     let ic = |f: fn(&epaint::Vertex) -> u8| {
-                        (w0 * f32::from(f(v[0])) + w1 * f32::from(f(v[1])) + w2 * f32::from(f(v[2])))
-                            .clamp(0.0, 255.0) as u8
+                        (w0 * f32::from(f(v[0]))
+                            + w1 * f32::from(f(v[1]))
+                            + w2 * f32::from(f(v[2])))
+                        .clamp(0.0, 255.0) as u8
                     };
                     let mut src = Color32::from_rgba_premultiplied(
                         ic(|v| v.color.r()),
@@ -173,7 +185,12 @@ pub fn render_rgba(
     rgba
 }
 
-pub fn write_png(path: &std::path::Path, width: u32, height: u32, rgba: &[u8]) -> anyhow::Result<()> {
+pub fn write_png(
+    path: &std::path::Path,
+    width: u32,
+    height: u32,
+    rgba: &[u8],
+) -> anyhow::Result<()> {
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir)?;
     }

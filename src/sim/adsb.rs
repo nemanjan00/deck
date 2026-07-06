@@ -134,6 +134,9 @@ mod tests {
                 .collect::<Vec<_>>()
                 .join(",")
         };
-        assert_eq!(a.iter().map(strip).collect::<Vec<_>>(), b.iter().map(strip).collect::<Vec<_>>());
+        assert_eq!(
+            a.iter().map(strip).collect::<Vec<_>>(),
+            b.iter().map(strip).collect::<Vec<_>>()
+        );
     }
 }

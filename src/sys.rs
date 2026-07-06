@@ -119,7 +119,10 @@ impl SysMon {
                 // "Volume: 0.65 [MUTED]"
                 if let Some(out) = run_out(&bin, &["get-volume", "@DEFAULT_AUDIO_SINK@"]) {
                     self.muted = out.contains("MUTED");
-                    if let Some(v) = out.split_whitespace().nth(1).and_then(|v| v.parse::<f32>().ok())
+                    if let Some(v) = out
+                        .split_whitespace()
+                        .nth(1)
+                        .and_then(|v| v.parse::<f32>().ok())
                     {
                         self.volume = Some((v * 100.0).round().clamp(0.0, 150.0) as u8);
                     }
@@ -162,7 +165,10 @@ impl SysMon {
         let arg = if delta > 0 { "5%+" } else { "5%-" };
         match kind {
             MixerKind::Wpctl => {
-                let _ = run_out(&bin, &["set-volume", "-l", "1.2", "@DEFAULT_AUDIO_SINK@", arg]);
+                let _ = run_out(
+                    &bin,
+                    &["set-volume", "-l", "1.2", "@DEFAULT_AUDIO_SINK@", arg],
+                );
             }
             MixerKind::Pactl => {
                 let sign = if delta > 0 { "+5%" } else { "-5%" };

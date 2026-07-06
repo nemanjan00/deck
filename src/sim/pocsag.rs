@@ -160,7 +160,10 @@ mod tests {
     #[test]
     fn transmission_structure() {
         let bits = transmission_bits(1_234_567, 0, Content::Alpha("HI"));
-        assert!(bits[..576].iter().enumerate().all(|(i, b)| *b == (i % 2 == 0)));
+        assert!(bits[..576]
+            .iter()
+            .enumerate()
+            .all(|(i, b)| *b == (i % 2 == 0)));
         let word_at = |start: usize| -> u32 {
             bits[start..start + 32]
                 .iter()

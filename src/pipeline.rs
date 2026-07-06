@@ -262,14 +262,22 @@ pub fn resolve(
     };
 
     if let Some(t) = extern_override {
-        return Some(extern_plan(t, Some("external pipeline from config".into()), tools));
+        return Some(extern_plan(
+            t,
+            Some("external pipeline from config".into()),
+            tools,
+        ));
     }
 
     // The simulator can't synthesize real C4FM/4FSK — digital voice on the
     // sim device always runs the decoded-line feed.
     if dev.kind == SdrKind::Sim && matches!(mode_def(mode).view, crate::modes::ViewKind::Voice) {
         let t = extern_template(dev.kind, mode)?;
-        return Some(extern_plan(t, Some("voice sim runs as a decoder feed".into()), tools));
+        return Some(extern_plan(
+            t,
+            Some("voice sim runs as a decoder feed".into()),
+            tools,
+        ));
     }
 
     match m.pipe {
@@ -612,7 +620,10 @@ mod tests {
             sbs_port: 30003,
             profile: "nfm".into(),
         };
-        let s = render_template("rtl_sdr -d {device} -f {center_hz} -g {gain} ({freq_mhz})", &v);
+        let s = render_template(
+            "rtl_sdr -d {device} -f {center_hz} -g {gain} ({freq_mhz})",
+            &v,
+        );
         assert_eq!(s, "rtl_sdr -d 0 -f 146400000 -g 32.8 (145.800000)");
     }
 
@@ -671,7 +682,10 @@ mod tests {
         let r = resolve(ModeId::Pocsag, &d, &cfg, &tools, 169_650_000, 0.0).unwrap();
         match r.plan {
             Plan::Extern { cmdline, .. } => {
-                assert!(cmdline.contains("simgen --mode pocsag --lines"), "{cmdline}");
+                assert!(
+                    cmdline.contains("simgen --mode pocsag --lines"),
+                    "{cmdline}"
+                );
             }
             _ => panic!("expected fallback extern plan"),
         }

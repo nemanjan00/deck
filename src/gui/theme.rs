@@ -38,7 +38,7 @@ impl Theme {
             text: Color32::from_rgb(0xd8, 0xe4, 0xea),
             text_dim: Color32::from_rgb(0x8a, 0x9a, 0xa6),
             text_faint: Color32::from_rgb(0x4a, 0x58, 0x64),
-            accent: Color32::from_rgb(0x2d, 0xe6, 0xa8),  // phosphor green
+            accent: Color32::from_rgb(0x2d, 0xe6, 0xa8), // phosphor green
             accent2: Color32::from_rgb(0x3b, 0xc2, 0xff), // signal cyan
             ok: Color32::from_rgb(0x2d, 0xe6, 0xa8),
             warn: Color32::from_rgb(0xff, 0xc4, 0x4d),

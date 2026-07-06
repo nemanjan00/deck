@@ -97,7 +97,11 @@ fn main() -> Result<()> {
                 println!(
                     "config path: {} ({})",
                     path.display(),
-                    if path.exists() { "exists" } else { "not created yet — `deck config --write`" }
+                    if path.exists() {
+                        "exists"
+                    } else {
+                        "not created yet — `deck config --write`"
+                    }
                 );
             }
             Ok(())

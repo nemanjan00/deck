@@ -30,9 +30,7 @@ pub fn parse_pocsag(line: &str) -> Option<PagerMsg> {
     let baud: u32 = baud.trim().parse().ok()?;
     let rest = rest.trim_start();
     let rest = rest.strip_prefix("Address:")?.trim_start();
-    let (address, rest) = rest
-        .split_once(char::is_whitespace)
-        .unwrap_or((rest, ""));
+    let (address, rest) = rest.split_once(char::is_whitespace).unwrap_or((rest, ""));
     let rest = rest.trim_start();
     let (function, rest) = match rest.strip_prefix("Function:") {
         Some(r) => {
@@ -139,8 +137,8 @@ mod tests {
 
     #[test]
     fn pocsag_numeric_and_tone() {
-        let m = parse_pocsag("POCSAG512: Address: 200042  Function: 3  Numeric: 0612345678")
-            .unwrap();
+        let m =
+            parse_pocsag("POCSAG512: Address: 200042  Function: 3  Numeric: 0612345678").unwrap();
         assert_eq!(m.baud, 512);
         assert_eq!(m.content, PagerContent::Numeric("0612345678".into()));
 

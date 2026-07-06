@@ -88,8 +88,11 @@ pub struct ModeDef {
     pub label: &'static str,
     pub section: Section,
     pub desc: &'static str,
-    /// 2-cell pictogram + ascii fallback
+    /// 2-cell pictogram + ascii fallback (spare metadata for text UIs;
+    /// the GUI paints vector icons by `key`)
+    #[allow(dead_code)]
     pub icon: &'static str,
+    #[allow(dead_code)]
     pub icon_ascii: &'static str,
     pub view: ViewKind,
     pub pipe: PipeKind,
@@ -102,8 +105,7 @@ pub struct ModeDef {
     pub presets: &'static [(&'static str, u64)],
 }
 
-const MULTIMON_POCSAG: &str =
-    "multimon-ng -t raw -a POCSAG512 -a POCSAG1200 -a POCSAG2400 -";
+const MULTIMON_POCSAG: &str = "multimon-ng -t raw -a POCSAG512 -a POCSAG1200 -a POCSAG2400 -";
 const MULTIMON_AFSK: &str = "multimon-ng -t raw -a AFSK1200 -";
 const RTTY_DECODER: &str = "sox -t raw -r 22050 -e signed -b 16 -c 1 - -t wav - \
                             | minimodem --rx --quiet rtty --file /dev/stdin";
@@ -414,6 +416,7 @@ pub fn mode_def(id: ModeId) -> &'static ModeDef {
     MODES.iter().find(|m| m.id == id).expect("mode registered")
 }
 
+#[allow(dead_code)] // public lookup API, exercised by tests
 pub fn mode_by_key(key: &str) -> Option<&'static ModeDef> {
     MODES.iter().find(|m| m.key == key)
 }

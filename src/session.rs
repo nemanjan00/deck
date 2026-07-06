@@ -9,9 +9,7 @@ use crate::modes::{mode_def, ModeId, ViewKind};
 use crate::parse::dsd::CallFields;
 use crate::parse::multimon::{AprsMsg, AprsParser, PagerMsg};
 use crate::parse::sbs::AircraftStore;
-use crate::pipeline::{
-    self, in_band, resolve, AppEvent, LineSrc, Plan, Spawned, ToolReport,
-};
+use crate::pipeline::{self, in_band, resolve, AppEvent, LineSrc, Plan, Spawned, ToolReport};
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
@@ -419,9 +417,7 @@ impl Session {
                 knobs.notch.store(mp.notch, Ordering::Relaxed);
                 knobs.hp_hz.store(mp.hp, Ordering::Relaxed);
                 knobs.lp_hz.store(mp.lp, Ordering::Relaxed);
-                knobs
-                    .squelch
-                    .store(f32_bits(mp.squelch), Ordering::Relaxed);
+                knobs.squelch.store(f32_bits(mp.squelch), Ordering::Relaxed);
                 knobs.sync_det.store(mp.det == 1, Ordering::Relaxed);
                 let monitorable = audio_out || decoder_cmd.is_some();
                 knobs
@@ -632,9 +628,7 @@ impl Session {
                 }
             }
             ViewKind::Adsb => {
-                if src != LineSrc::Stderr
-                    && self.stores.aircraft.push_line(&text, Instant::now())
-                {
+                if src != LineSrc::Stderr && self.stores.aircraft.push_line(&text, Instant::now()) {
                     self.stores.decoded += 1;
                 }
             }
@@ -664,18 +658,15 @@ impl Session {
                     if !fields.is_empty() {
                         self.stores.decoded += 1;
                         let now = Instant::now();
-                        match &mut self.stores.call {
-                            Some(c) => {
-                                c.fields.merge(fields);
-                                c.last = now;
-                            }
-                            None => {
-                                self.stores.call = Some(LiveCall {
-                                    fields,
-                                    started: now,
-                                    last: now,
-                                });
-                            }
+                        if let Some(c) = &mut self.stores.call {
+                            c.fields.merge(fields);
+                            c.last = now;
+                        } else {
+                            self.stores.call = Some(LiveCall {
+                                fields,
+                                started: now,
+                                last: now,
+                            });
                         }
                     }
                 }
@@ -754,11 +745,7 @@ impl Session {
                     self.scan.last_signal = now;
                     let ch = &mut self.scan.channels[self.scan.cur];
                     ch.hits += 1;
-                    let label = format!(
-                        "{} ({})",
-                        ch.label.clone(),
-                        crate::freq::fmt_short(ch.hz)
-                    );
+                    let label = format!("{} ({})", ch.label.clone(), crate::freq::fmt_short(ch.hz));
                     self.scan.hits.push_front(Timed::now(label));
                     while self.scan.hits.len() > 100 {
                         self.scan.hits.pop_back();

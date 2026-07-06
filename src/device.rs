@@ -97,10 +97,8 @@ pub fn detect_in(sysfs: &Path) -> Vec<SdrDevice> {
             ) else {
                 continue;
             };
-            let (Ok(vid), Ok(pid)) = (
-                u16::from_str_radix(&vid, 16),
-                u16::from_str_radix(&pid, 16),
-            ) else {
+            let (Ok(vid), Ok(pid)) = (u16::from_str_radix(&vid, 16), u16::from_str_radix(&pid, 16))
+            else {
                 continue;
             };
             if let Some((_, _, kind)) = USB_IDS.iter().find(|(v, p, _)| *v == vid && *p == pid) {

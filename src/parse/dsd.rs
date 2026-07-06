@@ -125,6 +125,7 @@ pub fn parse_line(line: &str) -> CallFields {
 }
 
 /// Is this line interesting enough to show in the event history?
+#[allow(dead_code)] // used by tests; future event filtering
 pub fn is_event_line(line: &str) -> bool {
     let f = parse_line(line);
     f.tg.is_some() || f.src.is_some() || f.kind.is_some()
@@ -136,9 +137,8 @@ mod tests {
 
     #[test]
     fn dmr_full_line() {
-        let f = parse_line(
-            "Slot 2  TLC  DMR  | Color Code=01 | Group Call | TG: 91 | RID: 2621234",
-        );
+        let f =
+            parse_line("Slot 2  TLC  DMR  | Color Code=01 | Group Call | TG: 91 | RID: 2621234");
         assert_eq!(f.slot, Some(2));
         assert_eq!(f.cc.as_deref(), Some("01"));
         assert_eq!(f.tg.as_deref(), Some("91"));

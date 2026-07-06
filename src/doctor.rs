@@ -9,7 +9,11 @@ use std::time::{Duration, Instant};
 
 pub fn report(cfg: &Config) -> String {
     let mut s = String::new();
-    let _ = writeln!(s, "deck v{} — environment report", env!("CARGO_PKG_VERSION"));
+    let _ = writeln!(
+        s,
+        "deck v{} — environment report",
+        env!("CARGO_PKG_VERSION")
+    );
     let _ = writeln!(s);
 
     let devices = detect();
@@ -134,9 +138,7 @@ fn run_with_timeout(cmdline: &str, timeout: Duration) -> (String, bool) {
     if timed_out {
         crate::pipeline::kill_group(sp.pgid);
     }
-    let out = reader
-        .and_then(|h| h.join().ok())
-        .unwrap_or_default();
+    let out = reader.and_then(|h| h.join().ok()).unwrap_or_default();
     (out, !timed_out)
 }
 

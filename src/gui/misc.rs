@@ -90,66 +90,67 @@ pub fn draw_devices(app: &mut DeckApp, ctx: &egui::Context) {
                 let selected = i == focus;
                 let is_active = i == active;
                 let frame = panel_frame(&th);
-                let resp = frame
-                    .show(ui, |ui| {
-                        ui.horizontal(|ui| {
-                            let (rect, _) = ui
-                                .allocate_exact_size(Vec2::splat(34.0), Sense::hover());
-                            icons::draw(
-                                ui.painter(),
-                                rect,
-                                if d.kind == crate::device::SdrKind::Sim {
-                                    "waterfall"
-                                } else {
-                                    "devices"
-                                },
-                                if is_active { th.accent } else { th.accent2 },
-                                th.text_faint,
-                            );
-                            ui.vertical(|ui| {
-                                ui.label(
-                                    RichText::new(format!(
-                                        "{}{}",
-                                        d.kind.label(),
-                                        if is_active { "  ● active" } else { "" }
-                                    ))
-                                    .strong()
-                                    .color(if is_active { th.accent } else { th.text }),
+                let resp =
+                    frame
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                let (rect, _) =
+                                    ui.allocate_exact_size(Vec2::splat(34.0), Sense::hover());
+                                icons::draw(
+                                    ui.painter(),
+                                    rect,
+                                    if d.kind == crate::device::SdrKind::Sim {
+                                        "waterfall"
+                                    } else {
+                                        "devices"
+                                    },
+                                    if is_active { th.accent } else { th.accent2 },
+                                    th.text_faint,
                                 );
-                                let ranges = d
-                                    .kind
-                                    .ranges()
-                                    .iter()
-                                    .map(|r| {
-                                        format!(
-                                            "{}–{}",
-                                            crate::freq::fmt_short(*r.start()),
-                                            crate::freq::fmt_short(*r.end())
-                                        )
-                                    })
-                                    .collect::<Vec<_>>()
-                                    .join(", ");
-                                ui.label(
-                                    RichText::new(format!(
-                                        "{}· {}{}",
-                                        if d.usb_path.is_empty() {
-                                            String::new()
-                                        } else {
-                                            format!("usb {} · ", d.usb_path)
-                                        },
-                                        ranges,
-                                        d.serial
-                                            .as_ref()
-                                            .map(|s| format!(" · sn {s}"))
-                                            .unwrap_or_default()
-                                    ))
-                                    .size(11.0)
-                                    .color(th.text_dim),
-                                );
+                                ui.vertical(|ui| {
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "{}{}",
+                                            d.kind.label(),
+                                            if is_active { "  ● active" } else { "" }
+                                        ))
+                                        .strong()
+                                        .color(if is_active { th.accent } else { th.text }),
+                                    );
+                                    let ranges = d
+                                        .kind
+                                        .ranges()
+                                        .iter()
+                                        .map(|r| {
+                                            format!(
+                                                "{}–{}",
+                                                crate::freq::fmt_short(*r.start()),
+                                                crate::freq::fmt_short(*r.end())
+                                            )
+                                        })
+                                        .collect::<Vec<_>>()
+                                        .join(", ");
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "{}· {}{}",
+                                            if d.usb_path.is_empty() {
+                                                String::new()
+                                            } else {
+                                                format!("usb {} · ", d.usb_path)
+                                            },
+                                            ranges,
+                                            d.serial
+                                                .as_ref()
+                                                .map(|s| format!(" · sn {s}"))
+                                                .unwrap_or_default()
+                                        ))
+                                        .size(11.0)
+                                        .color(th.text_dim),
+                                    );
+                                });
                             });
-                        });
-                    })
-                    .response;
+                        })
+                        .response;
                 let resp = resp.interact(Sense::click());
                 if selected {
                     super::widgets::focus_ring(ui, resp.rect, &th);
@@ -168,7 +169,11 @@ pub fn draw_devices(app: &mut DeckApp, ctx: &egui::Context) {
             }
             ui.add_space(10.0);
             // tools summary
-            ui.label(RichText::new("DECODERS / TOOLS").size(10.5).color(th.text_faint));
+            ui.label(
+                RichText::new("DECODERS / TOOLS")
+                    .size(10.5)
+                    .color(th.text_faint),
+            );
             ui.horizontal_wrapped(|ui| {
                 for t in crate::pipeline::KNOWN_TOOLS {
                     let ok = app.session.tools.has(t);
@@ -363,8 +368,7 @@ pub fn draw_power_popup(app: &mut DeckApp, ctx: &egui::Context) {
                 .show(ui, |ui| {
                     ui.set_min_width(220.0);
                     ui.horizontal(|ui| {
-                        let (rect, _) =
-                            ui.allocate_exact_size(Vec2::splat(22.0), Sense::hover());
+                        let (rect, _) = ui.allocate_exact_size(Vec2::splat(22.0), Sense::hover());
                         icons::draw(ui.painter(), rect, "power", th.err, th.text_faint);
                         ui.label(RichText::new("POWER").strong().color(th.text));
                     });

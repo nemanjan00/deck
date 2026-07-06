@@ -122,8 +122,16 @@ pub fn run(args: SimArgs) -> Result<()> {
 fn run_iq_band(args: &SimArgs) -> Result<()> {
     let rate = if args.rate == 0 { 2_400_000 } else { args.rate };
     let fs = f64::from(rate);
-    let center = if args.center == 0 { 433_920_000 } else { args.center };
-    let channel = if args.channel == 0 { center } else { args.channel };
+    let center = if args.center == 0 {
+        433_920_000
+    } else {
+        args.center
+    };
+    let channel = if args.channel == 0 {
+        center
+    } else {
+        args.channel
+    };
     let profile = if args.profile.is_empty() {
         args.mode.clone()
     } else {
@@ -195,11 +203,7 @@ fn run_iq_band(args: &SimArgs) -> Result<()> {
 
 // ------------------------------------------------------- decoder-input audio
 
-fn write_audio(
-    out: &mut impl Write,
-    th: &mut Throttle,
-    samples: &[f32],
-) -> Result<bool> {
+fn write_audio(out: &mut impl Write, th: &mut Throttle, samples: &[f32]) -> Result<bool> {
     let bytes = crate::dsp::f32_to_s16(samples);
     if !out_ok(out.write_all(&bytes))? {
         return Ok(false);
@@ -522,7 +526,7 @@ mod tests {
                 continue;
             }
             if cw >> 31 == 0 {
-                addr = Some(((cw >> 13) & 0x3_FFFF) << 3 | (k as u32 % 16) / 2);
+                addr = Some((((cw >> 13) & 0x3_FFFF) << 3) | ((k as u32 % 16) / 2));
             } else {
                 for i in (11..31).rev() {
                     text_bits.push((cw >> i) & 1 == 1);

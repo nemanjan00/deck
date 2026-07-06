@@ -67,7 +67,11 @@ impl VoiceSim {
             }
             "ysf" => {
                 let src = self.rng.pick(&self.callsigns).clone();
-                let dst = if self.rng.f64() < 0.8 { "ALL" } else { "CQCQCQ" };
+                let dst = if self.rng.f64() < 0.8 {
+                    "ALL"
+                } else {
+                    "CQCQCQ"
+                };
                 out.push(SimLine {
                     delay_ms: 0,
                     text: "Sync: +YSF VD2".into(),

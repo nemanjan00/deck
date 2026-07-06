@@ -50,7 +50,14 @@ pub fn draw(painter: &Painter, rect: Rect, key: &str, color: Color32, dim: Color
                 let st = if i == 0 { s } else { sd };
                 let pi = std::f32::consts::PI;
                 arc(painter, p(r, 0.5, 0.3), *rad * rect.width(), -2.2, -0.9, st);
-                arc(painter, p(r, 0.5, 0.3), *rad * rect.width(), 0.9 - pi, 2.2 - pi, st);
+                arc(
+                    painter,
+                    p(r, 0.5, 0.3),
+                    *rad * rect.width(),
+                    0.9 - pi,
+                    2.2 - pi,
+                    st,
+                );
             }
         }
         "wfm" => {
@@ -71,7 +78,12 @@ pub fn draw(painter: &Painter, rect: Rect, key: &str, color: Color32, dim: Color
             sine(painter, r, 0.62, 0.13, 2.0, sd);
             poly(
                 painter,
-                vec![p(r, 0.2, 0.42), p(r, 0.8, 0.42), p(r, 0.62, 0.2), p(r, 0.28, 0.2)],
+                vec![
+                    p(r, 0.2, 0.42),
+                    p(r, 0.8, 0.42),
+                    p(r, 0.62, 0.2),
+                    p(r, 0.28, 0.2),
+                ],
                 color,
             );
         }
@@ -79,7 +91,12 @@ pub fn draw(painter: &Painter, rect: Rect, key: &str, color: Color32, dim: Color
             sine(painter, r, 0.38, 0.13, 2.0, sd);
             poly(
                 painter,
-                vec![p(r, 0.2, 0.58), p(r, 0.8, 0.58), p(r, 0.62, 0.8), p(r, 0.28, 0.8)],
+                vec![
+                    p(r, 0.2, 0.58),
+                    p(r, 0.8, 0.58),
+                    p(r, 0.62, 0.8),
+                    p(r, 0.28, 0.8),
+                ],
                 color,
             );
         }
@@ -91,7 +108,12 @@ pub fn draw(painter: &Painter, rect: Rect, key: &str, color: Color32, dim: Color
         "ysf" => {
             poly(
                 painter,
-                vec![p(r, 0.5, 0.15), p(r, 0.85, 0.5), p(r, 0.5, 0.85), p(r, 0.15, 0.5)],
+                vec![
+                    p(r, 0.5, 0.15),
+                    p(r, 0.85, 0.5),
+                    p(r, 0.5, 0.85),
+                    p(r, 0.15, 0.5),
+                ],
                 color,
             );
             painter.circle_filled(p(r, 0.5, 0.5), w * 1.2, dim);
@@ -129,7 +151,13 @@ pub fn draw(painter: &Painter, rect: Rect, key: &str, color: Color32, dim: Color
             line(
                 painter,
                 r,
-                &[(0.16, 0.8), (0.16, 0.25), (0.5, 0.62), (0.84, 0.25), (0.84, 0.8)],
+                &[
+                    (0.16, 0.8),
+                    (0.16, 0.25),
+                    (0.5, 0.62),
+                    (0.84, 0.25),
+                    (0.84, 0.8),
+                ],
                 s,
             );
         }
@@ -156,31 +184,63 @@ pub fn draw(painter: &Painter, rect: Rect, key: &str, color: Color32, dim: Color
             for (i, y) in [0.3f32, 0.5, 0.7].iter().enumerate() {
                 let x0 = 0.16 + 0.05 * i as f32;
                 let x1 = 0.84 - 0.05 * i as f32;
-                line(painter, r, &[(x0, *y), (x1, *y)], if i == 1 { s } else { sd });
+                line(
+                    painter,
+                    r,
+                    &[(x0, *y), (x1, *y)],
+                    if i == 1 { s } else { sd },
+                );
             }
             // FSK step
-            line(painter, r, &[(0.3, 0.3), (0.3, 0.5), (0.55, 0.5), (0.55, 0.7)], s);
+            line(
+                painter,
+                r,
+                &[(0.3, 0.3), (0.3, 0.5), (0.55, 0.5), (0.55, 0.7)],
+                s,
+            );
         }
         "adsb" => {
             // plane silhouette
             poly(
                 painter,
-                vec![p(r, 0.5, 0.1), p(r, 0.58, 0.42), p(r, 0.5, 0.62), p(r, 0.42, 0.42)],
+                vec![
+                    p(r, 0.5, 0.1),
+                    p(r, 0.58, 0.42),
+                    p(r, 0.5, 0.62),
+                    p(r, 0.42, 0.42),
+                ],
                 color,
             );
             poly(
                 painter,
-                vec![p(r, 0.5, 0.32), p(r, 0.92, 0.55), p(r, 0.92, 0.64), p(r, 0.5, 0.5)],
+                vec![
+                    p(r, 0.5, 0.32),
+                    p(r, 0.92, 0.55),
+                    p(r, 0.92, 0.64),
+                    p(r, 0.5, 0.5),
+                ],
                 color,
             );
             poly(
                 painter,
-                vec![p(r, 0.5, 0.32), p(r, 0.08, 0.55), p(r, 0.08, 0.64), p(r, 0.5, 0.5)],
+                vec![
+                    p(r, 0.5, 0.32),
+                    p(r, 0.08, 0.55),
+                    p(r, 0.08, 0.64),
+                    p(r, 0.5, 0.5),
+                ],
                 color,
             );
             poly(
                 painter,
-                vec![p(r, 0.5, 0.62), p(r, 0.68, 0.82), p(r, 0.68, 0.88), p(r, 0.5, 0.78), p(r, 0.32, 0.88), p(r, 0.32, 0.82)],
+                vec![
+                    p(r, 0.5, 0.62),
+                    p(r, 0.68, 0.82),
+                    p(r, 0.68, 0.88),
+                    p(r, 0.5, 0.78),
+                    p(r, 0.32, 0.88),
+                    p(r, 0.32, 0.82),
+                ],
                 color,
             );
         }
@@ -228,7 +288,14 @@ pub fn draw(painter: &Painter, rect: Rect, key: &str, color: Color32, dim: Color
             line(
                 painter,
                 r,
-                &[(0.08, 0.55), (0.32, 0.55), (0.42, 0.25), (0.54, 0.8), (0.64, 0.55), (0.92, 0.55)],
+                &[
+                    (0.08, 0.55),
+                    (0.32, 0.55),
+                    (0.42, 0.25),
+                    (0.54, 0.8),
+                    (0.64, 0.55),
+                    (0.92, 0.55),
+                ],
                 s,
             );
         }
@@ -267,7 +334,14 @@ pub fn logo(painter: &Painter, rect: Rect, color: Color32, dim: Color32) {
     painter.circle_filled(p(r, 0.5, 0.14), w * 1.4, color);
     for (i, rad) in [0.2f32, 0.34, 0.48].iter().enumerate() {
         let st = if i == 0 { s } else { sd };
-        arc(painter, p(r, 0.5, 0.14), *rad * rect.width(), -1.1, 0.25, st);
+        arc(
+            painter,
+            p(r, 0.5, 0.14),
+            *rad * rect.width(),
+            -1.1,
+            0.25,
+            st,
+        );
         arc(
             painter,
             p(r, 0.5, 0.14),
@@ -284,7 +358,13 @@ pub fn logo(painter: &Painter, rect: Rect, color: Color32, dim: Color32) {
 }
 
 /// Battery glyph with fill level (0..1); `charging` overlays a bolt.
-pub fn battery(painter: &Painter, rect: Rect, level: f32, charging: bool, th: &super::theme::Theme) {
+pub fn battery(
+    painter: &Painter,
+    rect: Rect,
+    level: f32,
+    charging: bool,
+    th: &super::theme::Theme,
+) {
     let r = rect.shrink(rect.height() * 0.12);
     let body = Rect::from_min_max(r.min, Pos2::new(r.max.x - r.width() * 0.12, r.max.y));
     painter.rect_stroke(body, 2.0, Stroke::new(1.4, th.text_dim));
@@ -293,11 +373,20 @@ pub fn battery(painter: &Painter, rect: Rect, level: f32, charging: bool, th: &s
         Pos2::new(r.max.x, r.max.y - r.height() * 0.28),
     );
     painter.rect_filled(nub, 1.0, th.text_dim);
-    let color = if level < 0.2 { th.err } else if level < 0.4 { th.warn } else { th.ok };
+    let color = if level < 0.2 {
+        th.err
+    } else if level < 0.4 {
+        th.warn
+    } else {
+        th.ok
+    };
     let fill = body.shrink(2.5);
     let fill = Rect::from_min_max(
         fill.min,
-        Pos2::new(fill.min.x + fill.width() * level.clamp(0.02, 1.0), fill.max.y),
+        Pos2::new(
+            fill.min.x + fill.width() * level.clamp(0.02, 1.0),
+            fill.max.y,
+        ),
     );
     painter.rect_filled(fill, 1.0, color);
     if charging {
@@ -320,10 +409,21 @@ pub fn battery(painter: &Painter, rect: Rect, level: f32, charging: bool, th: &s
 /// Speaker glyph; `pct` None = muted.
 pub fn speaker(painter: &Painter, rect: Rect, pct: Option<u8>, th: &super::theme::Theme) {
     let r = &rect;
-    let c = if pct.is_some() { th.text_dim } else { th.text_faint };
+    let c = if pct.is_some() {
+        th.text_dim
+    } else {
+        th.text_faint
+    };
     poly(
         painter,
-        vec![p(r, 0.12, 0.4), p(r, 0.34, 0.4), p(r, 0.52, 0.2), p(r, 0.52, 0.8), p(r, 0.34, 0.6), p(r, 0.12, 0.6)],
+        vec![
+            p(r, 0.12, 0.4),
+            p(r, 0.34, 0.4),
+            p(r, 0.52, 0.2),
+            p(r, 0.52, 0.8),
+            p(r, 0.34, 0.6),
+            p(r, 0.12, 0.6),
+        ],
         c,
     );
     let s = Stroke::new((rect.width() * 0.08).clamp(1.2, 2.2), c);

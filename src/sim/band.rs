@@ -66,14 +66,12 @@ impl Babble {
     pub fn sample(&mut self) -> f32 {
         if self.hold == 0 {
             // new "syllable" every 80–300 ms
-            self.hold = self.rng.range_u32(
-                (self.fs * 0.08) as u32,
-                (self.fs * 0.3) as u32,
-            );
+            self.hold = self
+                .rng
+                .range_u32((self.fs * 0.08) as u32, (self.fs * 0.3) as u32);
             self.env_tgt = if self.rng.f64() < 0.75 { 1.0 } else { 0.05 };
             for i in 0..3 {
-                self.ftgt[i] =
-                    (300.0 + 700.0 * i as f32) * self.rng.range_f64(0.7, 1.4) as f32;
+                self.ftgt[i] = (300.0 + 700.0 * i as f32) * self.rng.range_f64(0.7, 1.4) as f32;
             }
         }
         self.hold -= 1;
@@ -249,10 +247,7 @@ impl Component {
         match self {
             Component::Noise { rng, amp } => {
                 for o in out.iter_mut() {
-                    *o += Complex32::new(
-                        rng.gauss() as f32 * *amp,
-                        rng.gauss() as f32 * *amp,
-                    );
+                    *o += Complex32::new(rng.gauss() as f32 * *amp, rng.gauss() as f32 * *amp);
                 }
             }
             Component::Carrier {
@@ -455,9 +450,7 @@ pub fn build_profile(
                     fs,
                     45.45,
                     1.2,
-                    Box::new(move || {
-                        super::baudot::encode(&format!("RYRYRY DE DECK {msg} "))
-                    }),
+                    Box::new(move || super::baudot::encode(&format!("RYRYRY DE DECK {msg} "))),
                 ),
                 lpf: 1.0,
                 lpf_state: 0.0,
@@ -466,7 +459,11 @@ pub fn build_profile(
         }
         "pocsag" => {
             c.push(pocsag_bursts(off, address, message.clone()));
-            c.push(pocsag_bursts(off + 200_000.0, address + 100, "2nd channel".into()));
+            c.push(pocsag_bursts(
+                off + 200_000.0,
+                address + 100,
+                "2nd channel".into(),
+            ));
         }
         "aprs" => {
             let mut n = 0u32;
@@ -509,7 +506,11 @@ pub fn build_profile(
                 freq: off + 620_000.0,
                 n: 0,
             });
-            c.push(nbfm_voice(off - 480_000.0, seed ^ 9, Schedule::new(5.0, 0.5, 0.2)));
+            c.push(nbfm_voice(
+                off - 480_000.0,
+                seed ^ 9,
+                Schedule::new(5.0, 0.5, 0.2),
+            ));
             c.push(pocsag_bursts(off + 300_000.0, address, message.clone()));
         }
         // nfm, scanner, voice modes, anything else: busy NBFM band
@@ -520,7 +521,11 @@ pub fn build_profile(
                 Schedule::new(7.0, 0.6, 0.0)
             };
             c.push(nbfm_voice(off, seed ^ 1, sched));
-            c.push(nbfm_voice(off - 350_000.0, seed ^ 7, Schedule::new(9.0, 0.25, 0.5)));
+            c.push(nbfm_voice(
+                off - 350_000.0,
+                seed ^ 7,
+                Schedule::new(9.0, 0.25, 0.5),
+            ));
             c.push(Component::Carrier {
                 nco: Nco::new(off + 421_000.0, fs),
                 amp: 0.05,
@@ -552,7 +557,16 @@ mod tests {
     fn nfm_profile_puts_signal_on_channel() {
         let fs = 2_400_000.0;
         let off = -600_000.0;
-        let mut p = build_profile("nfm", fs, off, 1, 145_500_000, "N0DECK".into(), 1, "hi".into());
+        let mut p = build_profile(
+            "nfm",
+            fs,
+            off,
+            1,
+            145_500_000,
+            "N0DECK".into(),
+            1,
+            "hi".into(),
+        );
         let mut iq = vec![Complex32::default(); 65536];
         for c in &mut p.components {
             c.add(&mut iq, fs);
@@ -568,7 +582,16 @@ mod tests {
     #[test]
     fn rtty_profile_marks_spot() {
         let fs = 2_400_000.0;
-        let mut p = build_profile("rtty", fs, 10_000.0, 2, 7_646_000, "X".into(), 1, "TEST".into());
+        let mut p = build_profile(
+            "rtty",
+            fs,
+            10_000.0,
+            2,
+            7_646_000,
+            "X".into(),
+            1,
+            "TEST".into(),
+        );
         let mut iq = vec![Complex32::default(); 65536];
         for c in &mut p.components {
             c.add(&mut iq, fs);

@@ -73,8 +73,7 @@ pub fn control_row(ui: &mut Ui, th: &Theme, c: ControlRow) -> Response {
 /// Big primary action button (RX start/stop).
 pub fn action_button(ui: &mut Ui, th: &Theme, label: &str, hot: bool, focused: bool) -> Response {
     let h = 56.0;
-    let (rect, resp) =
-        ui.allocate_exact_size(Vec2::new(ui.available_width(), h), Sense::click());
+    let (rect, resp) = ui.allocate_exact_size(Vec2::new(ui.available_width(), h), Sense::click());
     let p = ui.painter();
     let bg = if hot { th.rec } else { th.sel_bg };
     let fg = if hot { Color32::WHITE } else { th.sel_fg };
@@ -354,8 +353,10 @@ pub fn waterfall(
         match &mut slot.tex {
             Some(t) => t.set(img, TextureOptions::LINEAR),
             None => {
-                slot.tex =
-                    Some(ui.ctx().load_texture("waterfall", img, TextureOptions::LINEAR))
+                slot.tex = Some(
+                    ui.ctx()
+                        .load_texture("waterfall", img, TextureOptions::LINEAR),
+                )
             }
         }
         slot.rev = wf.rev;
@@ -382,8 +383,7 @@ pub fn waterfall(
 // -------------------------------------------------------------- S-meter
 
 pub fn s_meter(ui: &mut Ui, th: &Theme, rms: f32, squelch: f32, gate_hint: bool) {
-    let (rect, _) =
-        ui.allocate_exact_size(Vec2::new(ui.available_width(), 22.0), Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 22.0), Sense::hover());
     let p = ui.painter();
     p.rect_filled(rect, 4.0, th.panel);
     let db = 20.0 * (rms.max(1e-5)).log10(); // −100..0

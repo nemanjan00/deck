@@ -279,7 +279,9 @@ impl DeckApp {
             let done = since.elapsed() > Duration::from_millis(1600)
                 || ctx.input(|i| {
                     i.pointer.any_pressed()
-                        || i.events.iter().any(|e| matches!(e, egui::Event::Key { .. }))
+                        || i.events
+                            .iter()
+                            .any(|e| matches!(e, egui::Event::Key { .. }))
                 });
             if done {
                 self.splash_since = None;
@@ -394,15 +396,7 @@ impl DeckApp {
         }
     }
 
-    fn menu_keys(
-        &mut self,
-        esc: bool,
-        enter: bool,
-        up: bool,
-        down: bool,
-        left: bool,
-        right: bool,
-    ) {
+    fn menu_keys(&mut self, esc: bool, enter: bool, up: bool, down: bool, left: bool, right: bool) {
         let n = tiles().len();
         let cols = self.menu_cols;
         if left && self.menu_focus > 0 {
@@ -567,9 +561,7 @@ impl DeckApp {
                             ui.label(egui::RichText::new(msg).color(th.warn).size(12.0));
                         }
                         None => {
-                            ui.label(
-                                egui::RichText::new(hint).color(th.text_faint).size(11.0),
-                            );
+                            ui.label(egui::RichText::new(hint).color(th.text_faint).size(11.0));
                         }
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -663,7 +655,11 @@ impl DeckApp {
             Tile::Mode(m) => {
                 let def = mode_def(m);
                 let mp = self.session.mode_persist(m);
-                let hz = if mp.freq == 0 { def.default_hz } else { mp.freq };
+                let hz = if mp.freq == 0 {
+                    def.default_hz
+                } else {
+                    mp.freq
+                };
                 let blocked = self.support.get(&m).cloned().flatten();
                 let running = self.running_mode() == Some(m);
                 let sub = if running {

@@ -177,7 +177,11 @@ fn apply_knobs(app: &mut DeckApp, mode: ModeId) {
     if r.mode != mode {
         return;
     }
-    let mp = app.mode_ui.get(&mode).map(|u| u.mp.clone()).unwrap_or_default();
+    let mp = app
+        .mode_ui
+        .get(&mode)
+        .map(|u| u.mp.clone())
+        .unwrap_or_default();
     let k = &r.knobs;
     k.nr.store(f32_bits(nr_level(mp.nr)), Ordering::Relaxed);
     k.nb.store(f32_bits(nb_level(mp.nb)), Ordering::Relaxed);
@@ -205,12 +209,8 @@ fn adjust(app: &mut DeckApp, mode: ModeId, c: Ctl, dir: i32) {
                 return;
             }
             Ctl::Sql => mp.squelch = (mp.squelch + dir as f32 * 0.005).clamp(0.0, 0.4),
-            Ctl::Nr => {
-                mp.nr = (mp.nr as i32 + dir).rem_euclid(NR_LEVELS.len() as i32) as u8
-            }
-            Ctl::Nb => {
-                mp.nb = (mp.nb as i32 + dir).rem_euclid(NB_LEVELS.len() as i32) as u8
-            }
+            Ctl::Nr => mp.nr = (mp.nr as i32 + dir).rem_euclid(NR_LEVELS.len() as i32) as u8,
+            Ctl::Nb => mp.nb = (mp.nb as i32 + dir).rem_euclid(NB_LEVELS.len() as i32) as u8,
             Ctl::Notch => mp.notch = !mp.notch,
             Ctl::Hp => {
                 let i = HP_LADDER.iter().position(|h| *h == mp.hp).unwrap_or(0);
@@ -599,7 +599,10 @@ fn draw_left(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, com
         let dev = app.session.device();
         let ok = dev.freq_ok(app.mode_ui.get(&mode).map(|u| u.freq.hz).unwrap_or(0));
         let msg = if ok {
-            format!("{} · in band", crate::freq::fmt_short(app.mode_ui(mode).freq.hz))
+            format!(
+                "{} · in band",
+                crate::freq::fmt_short(app.mode_ui(mode).freq.hz)
+            )
         } else {
             format!("outside {} range", dev.kind.label())
         };
@@ -613,7 +616,11 @@ fn draw_left(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, com
 
     // RX button (focus index 1 == ctls[0] == Rx)
     let rx_focused = focus == 1;
-    let label = if running { "■  STOP" } else { "▶  START RX" };
+    let label = if running {
+        "■  STOP"
+    } else {
+        "▶  START RX"
+    };
     if widgets::action_button(ui, th, label, running, rx_focused).clicked() {
         activate(app, mode, Ctl::Rx);
     }
@@ -734,7 +741,11 @@ fn draw_viz(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, h: f
         if r.rate == 0 {
             return None;
         }
-        let freq = app.mode_ui.get(&mode).map(|u| u.freq.hz).unwrap_or(r.freq_hz);
+        let freq = app
+            .mode_ui
+            .get(&mode)
+            .map(|u| u.freq.hz)
+            .unwrap_or(r.freq_hz);
         Some(0.5 + (freq as f64 - r.center_hz as f64) as f32 / r.rate as f32)
     });
 
@@ -815,10 +826,22 @@ fn draw_audio_info(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Them
         let def = mode_def(mode);
         widgets::chip(ui, th, "MODE", def.label, th.accent2);
         if mp.nr > 0 {
-            widgets::chip(ui, th, "NR", ["", "low", "med", "high"][(mp.nr as usize).min(3)], th.accent);
+            widgets::chip(
+                ui,
+                th,
+                "NR",
+                ["", "low", "med", "high"][(mp.nr as usize).min(3)],
+                th.accent,
+            );
         }
         if mp.nb > 0 {
-            widgets::chip(ui, th, "NB", ["", "soft", "hard"][(mp.nb as usize).min(2)], th.accent);
+            widgets::chip(
+                ui,
+                th,
+                "NB",
+                ["", "soft", "hard"][(mp.nb as usize).min(2)],
+                th.accent,
+            );
         }
         if mp.notch {
             widgets::chip(ui, th, "NOTCH", "auto", th.accent);
@@ -830,7 +853,11 @@ fn draw_audio_info(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Them
                 "FILTER",
                 &format!(
                     "{}–{}",
-                    if mp.hp > 0 { format!("{}", mp.hp) } else { "0".into() },
+                    if mp.hp > 0 {
+                        format!("{}", mp.hp)
+                    } else {
+                        "0".into()
+                    },
                     if mp.lp > 0 {
                         format!("{:.1}k", mp.lp as f32 / 1000.0)
                     } else {
@@ -862,53 +889,51 @@ fn draw_audio_info(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Them
 fn draw_voice(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
     let def = mode_def(mode);
     // live call card
-    panel_frame(th).show(ui, |ui| {
-        match &app.session.stores.call {
-            Some(c) => {
-                ui.horizontal_wrapped(|ui| {
-                    widgets::chip(ui, th, "PROTO", def.label, th.accent2);
-                    if let Some(tg) = &c.fields.tg {
-                        widgets::chip(ui, th, "TG", tg, th.accent);
-                    }
-                    if let Some(src) = &c.fields.src {
-                        widgets::chip(ui, th, "SRC", src, th.text);
-                    }
-                    if let Some(dst) = &c.fields.dst {
-                        widgets::chip(ui, th, "DST", dst, th.text);
-                    }
-                    if let Some(slot) = c.fields.slot {
-                        widgets::chip(ui, th, "SLOT", &slot.to_string(), th.accent2);
-                    }
-                    if let Some(cc) = &c.fields.cc {
-                        widgets::chip(ui, th, "CC", cc, th.accent2);
-                    }
-                    for (k, v) in &c.fields.extra {
-                        widgets::chip(ui, th, k, v, th.text_dim);
-                    }
-                    let dur = c.started.elapsed().as_secs();
-                    widgets::chip(
-                        ui,
-                        th,
-                        "DUR",
-                        &format!("{:02}:{:02}", dur / 60, dur % 60),
-                        th.ok,
-                    );
-                });
-                if let Some(kind) = &c.fields.kind {
-                    ui.label(RichText::new(kind).color(th.ok).size(13.0));
+    panel_frame(th).show(ui, |ui| match &app.session.stores.call {
+        Some(c) => {
+            ui.horizontal_wrapped(|ui| {
+                widgets::chip(ui, th, "PROTO", def.label, th.accent2);
+                if let Some(tg) = &c.fields.tg {
+                    widgets::chip(ui, th, "TG", tg, th.accent);
                 }
-            }
-            None => {
-                ui.label(
-                    RichText::new(if app.running_mode() == Some(mode) {
-                        "monitoring — no call"
-                    } else {
-                        "stopped"
-                    })
-                    .color(th.text_faint)
-                    .size(14.0),
+                if let Some(src) = &c.fields.src {
+                    widgets::chip(ui, th, "SRC", src, th.text);
+                }
+                if let Some(dst) = &c.fields.dst {
+                    widgets::chip(ui, th, "DST", dst, th.text);
+                }
+                if let Some(slot) = c.fields.slot {
+                    widgets::chip(ui, th, "SLOT", &slot.to_string(), th.accent2);
+                }
+                if let Some(cc) = &c.fields.cc {
+                    widgets::chip(ui, th, "CC", cc, th.accent2);
+                }
+                for (k, v) in &c.fields.extra {
+                    widgets::chip(ui, th, k, v, th.text_dim);
+                }
+                let dur = c.started.elapsed().as_secs();
+                widgets::chip(
+                    ui,
+                    th,
+                    "DUR",
+                    &format!("{:02}:{:02}", dur / 60, dur % 60),
+                    th.ok,
                 );
+            });
+            if let Some(kind) = &c.fields.kind {
+                ui.label(RichText::new(kind).color(th.ok).size(13.0));
             }
+        }
+        None => {
+            ui.label(
+                RichText::new(if app.running_mode() == Some(mode) {
+                    "monitoring — no call"
+                } else {
+                    "stopped"
+                })
+                .color(th.text_faint)
+                .size(14.0),
+            );
         }
     });
     ui.add_space(4.0);
@@ -989,7 +1014,17 @@ fn draw_pager(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
         let u = app.mode_ui(mode);
         u.list_sel = i;
         u.list_mode = true;
-        list_keys(app, mode, ViewKind::Pager, false, true, false, false, false, false);
+        list_keys(
+            app,
+            mode,
+            ViewKind::Pager,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+        );
     }
 }
 
@@ -1036,7 +1071,17 @@ fn draw_aprs(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
         let u = app.mode_ui(mode);
         u.list_sel = i;
         u.list_mode = true;
-        list_keys(app, mode, ViewKind::Aprs, false, true, false, false, false, false);
+        list_keys(
+            app,
+            mode,
+            ViewKind::Aprs,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+        );
     }
 }
 
@@ -1075,12 +1120,24 @@ fn draw_adsb(app: &mut DeckApp, ui: &mut egui::Ui, th: &Theme) {
                 let line = format!(
                     "{:<6} {:<8} {:>6} {:>4} {:>4} {:>9} {:>10} {:>5} {:>3.0}s",
                     ac.icao,
-                    if ac.callsign.is_empty() { "—" } else { &ac.callsign },
+                    if ac.callsign.is_empty() {
+                        "—"
+                    } else {
+                        &ac.callsign
+                    },
                     ac.alt.map(|v| v.to_string()).unwrap_or_else(|| "—".into()),
-                    ac.gs.map(|v| format!("{v:.0}")).unwrap_or_else(|| "—".into()),
-                    ac.trk.map(|v| format!("{v:.0}")).unwrap_or_else(|| "—".into()),
-                    ac.lat.map(|v| format!("{v:.4}")).unwrap_or_else(|| "—".into()),
-                    ac.lon.map(|v| format!("{v:.4}")).unwrap_or_else(|| "—".into()),
+                    ac.gs
+                        .map(|v| format!("{v:.0}"))
+                        .unwrap_or_else(|| "—".into()),
+                    ac.trk
+                        .map(|v| format!("{v:.0}"))
+                        .unwrap_or_else(|| "—".into()),
+                    ac.lat
+                        .map(|v| format!("{v:.4}"))
+                        .unwrap_or_else(|| "—".into()),
+                    ac.lon
+                        .map(|v| format!("{v:.4}"))
+                        .unwrap_or_else(|| "—".into()),
                     ac.msgs,
                     age,
                 );
@@ -1128,13 +1185,9 @@ fn draw_scanner(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) 
             ui.label(RichText::new(phase).color(color).strong().size(15.0));
             if let Some(c) = cur {
                 ui.label(
-                    RichText::new(format!(
-                        "{}  ·  {}",
-                        c.label,
-                        crate::freq::fmt_short(c.hz)
-                    ))
-                    .font(FontId::monospace(15.0))
-                    .color(th.text),
+                    RichText::new(format!("{}  ·  {}", c.label, crate::freq::fmt_short(c.hz)))
+                        .font(FontId::monospace(15.0))
+                        .color(th.text),
                 );
             }
         });
@@ -1190,14 +1243,15 @@ fn draw_scanner(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) 
                     if resp.clicked() {
                         jump = Some(i);
                     }
-                    let lock_resp = ui.add(
-                        egui::Button::new(
-                            RichText::new(if c.locked { "⊘" } else { "•" })
-                                .color(if c.locked { th.err } else { th.text_faint }),
-                        )
-                        .small()
-                        .frame(false),
-                    );
+                    let lock_resp =
+                        ui.add(
+                            egui::Button::new(
+                                RichText::new(if c.locked { "⊘" } else { "•" })
+                                    .color(if c.locked { th.err } else { th.text_faint }),
+                            )
+                            .small()
+                            .frame(false),
+                        );
                     if lock_resp.clicked() {
                         lock = Some(i);
                     }

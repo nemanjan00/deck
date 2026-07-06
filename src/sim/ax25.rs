@@ -202,7 +202,12 @@ mod tests {
 
     #[test]
     fn frame_roundtrip_through_hdlc() {
-        let f = frame_bytes("N0DECK-9", "APDECK", &["WIDE1-1"], "!4447.40N/02027.60E>test");
+        let f = frame_bytes(
+            "N0DECK-9",
+            "APDECK",
+            &["WIDE1-1"],
+            "!4447.40N/02027.60E>test",
+        );
         let bits = hdlc_bits(&f, 4, 2);
         // no run of six 1s outside flags
         let inner = &bits[4 * 8..bits.len() - 2 * 8];

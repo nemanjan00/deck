@@ -13,7 +13,7 @@
 use crate::config::Config;
 use crate::dsp::{
     self, decim_factors, Agc, AutoNotch, DcBlock, Deemphasis, FilterChain, FirDecim, FirDecimF32,
-    FmDemod, NoiseBlanker, Nco, Resampler, SamDemod, SpectralNr, SpectrumFft, SsbDemod,
+    FmDemod, Nco, NoiseBlanker, Resampler, SamDemod, SpectralNr, SpectrumFft, SsbDemod,
 };
 use crate::modes::Demod;
 use crate::pipeline::{
@@ -104,10 +104,6 @@ impl StdinSink {
             }
         }
     }
-
-    fn alive(&self) -> bool {
-        self.0.lock().map(|g| g.is_some()).unwrap_or(false)
-    }
 }
 
 pub struct EngineParams {
@@ -136,11 +132,14 @@ pub struct RxEngine {
     sink_stdin: Option<Arc<Mutex<Option<ChildStdin>>>>,
     pub knobs: Arc<Knobs>,
     tx: Sender<AppEvent>,
-    pub sink_missing: bool,
 }
 
 impl RxEngine {
-    pub fn start(p: EngineParams, knobs: Arc<Knobs>, tx: Sender<AppEvent>) -> std::io::Result<Self> {
+    pub fn start(
+        p: EngineParams,
+        knobs: Arc<Knobs>,
+        tx: Sender<AppEvent>,
+    ) -> std::io::Result<Self> {
         // decoder first, so it's ready when samples arrive
         let (decoder, decoder_stdin) = match &p.decoder_cmd {
             Some(cmd) => {
@@ -151,13 +150,13 @@ impl RxEngine {
             }
             None => (None, None),
         };
-        let (sink, sink_stdin, sink_missing) = match &p.sink_cmd {
+        let (sink, sink_stdin) = match &p.sink_cmd {
             Some(cmd) => {
                 let mut sp = spawn_shell(cmd, false, true)?;
                 let stdin = Arc::new(Mutex::new(sp.child.stdin.take()));
-                (Some(sp), Some(stdin), false)
+                (Some(sp), Some(stdin))
             }
-            None => (None, None, true),
+            None => (None, None),
         };
         let mut eng = Self {
             run: p.run,
@@ -173,7 +172,6 @@ impl RxEngine {
             sink_stdin,
             knobs,
             tx,
-            sink_missing,
         };
         eng.spawn_source(&p.source_cmdline)?;
         Ok(eng)
@@ -186,7 +184,13 @@ impl RxEngine {
             let tx = self.tx.clone();
             let run = self.run;
             std::thread::spawn(move || {
-                crate::pipeline::read_stream(stderr, run, crate::pipeline::LineSrc::Stderr, tx, false)
+                crate::pipeline::read_stream(
+                    stderr,
+                    run,
+                    crate::pipeline::LineSrc::Stderr,
+                    tx,
+                    false,
+                )
             });
         }
         if let Some(stdout) = sp.child.stdout.take() {
@@ -217,13 +221,6 @@ impl RxEngine {
             kill_group_wait(sp);
         }
         self.spawn_source(new_source_cmdline)
-    }
-
-    pub fn decoder_alive(&self) -> bool {
-        self.decoder_stdin
-            .as_ref()
-            .map(|s| StdinSink(s.clone()).alive())
-            .unwrap_or(false)
     }
 
     pub fn stop(mut self) {

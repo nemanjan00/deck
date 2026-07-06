@@ -29,13 +29,11 @@ pub fn encode(text: &str) -> Vec<bool> {
     let push_code = |bits: &mut Vec<bool>, code: u8| {
         bits.push(false); // start (space)
         for i in 0..5 {
-            bits.push(code >> i & 1 == 1);
+            bits.push((code >> i) & 1 == 1);
         }
         bits.extend_from_slice(&[true, true]); // stop bits (mark)
     };
-    for _ in 0..8 {
-        bits.push(true); // idle mark
-    }
+    bits.extend(std::iter::repeat(true).take(8)); // idle marks
     let mut figs = false;
     push_code(&mut bits, SHIFT_LTRS);
     for c in text.chars() {
@@ -52,6 +50,7 @@ pub fn encode(text: &str) -> Vec<bool> {
 }
 
 /// Test-side decoder (also used by unit tests elsewhere).
+#[allow(dead_code)]
 pub fn decode(bits: &[bool]) -> String {
     let mut out = String::new();
     let mut figs = false;

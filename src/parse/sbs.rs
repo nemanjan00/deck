@@ -33,11 +33,6 @@ impl AircraftStore {
         }
     }
 
-    pub fn clear(&mut self) {
-        self.map.clear();
-        self.total_msgs = 0;
-    }
-
     /// Returns true when the line was a valid SBS message.
     pub fn push_line(&mut self, line: &str, now: Instant) -> bool {
         let f: Vec<&str> = line.split(',').collect();
@@ -49,10 +44,15 @@ impl AircraftStore {
             return false;
         }
         self.total_msgs += 1;
-        let entry = self
-            .map
-            .entry(icao.clone())
-            .or_insert_with(|| (Aircraft { icao, ..Default::default() }, now));
+        let entry = self.map.entry(icao.clone()).or_insert_with(|| {
+            (
+                Aircraft {
+                    icao,
+                    ..Default::default()
+                },
+                now,
+            )
+        });
         let (ac, last) = entry;
         *last = now;
         ac.msgs += 1;
@@ -110,6 +110,7 @@ impl AircraftStore {
         self.map.len()
     }
 
+    #[allow(dead_code)] // len()'s conventional companion; used in tests
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
     }

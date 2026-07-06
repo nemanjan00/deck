@@ -191,7 +191,9 @@ impl SpectralNr {
         }
         y.copy_from_slice(&self.overlap[..NR_HOP]);
         self.overlap.copy_within(NR_HOP.., 0);
-        self.overlap[NR_N - NR_HOP..].iter_mut().for_each(|x| *x = 0.0);
+        self.overlap[NR_N - NR_HOP..]
+            .iter_mut()
+            .for_each(|x| *x = 0.0);
         y
     }
 }
@@ -381,8 +383,7 @@ fn windowed_sinc(taps: usize, cutoff: f32) -> Vec<f32> {
             } else {
                 (2.0 * std::f32::consts::PI * cutoff * x).sin() / (std::f32::consts::PI * x)
             };
-            let w = 0.54
-                - 0.46 * (2.0 * std::f32::consts::PI * i as f32 / m as f32).cos();
+            let w = 0.54 - 0.46 * (2.0 * std::f32::consts::PI * i as f32 / m as f32).cos();
             sinc * w
         })
         .collect();
@@ -979,9 +980,15 @@ mod tests {
         let mut blanked = iq.clone();
         nb.process(&mut blanked);
         let peak_before = iq.iter().map(|c| c.norm()).fold(0.0f32, f32::max);
-        let peak_after = blanked[1000..].iter().map(|c| c.norm()).fold(0.0f32, f32::max);
+        let peak_after = blanked[1000..]
+            .iter()
+            .map(|c| c.norm())
+            .fold(0.0f32, f32::max);
         assert!(peak_before > 4.0);
-        assert!(peak_after < 0.5, "spikes should be blanked, got {peak_after}");
+        assert!(
+            peak_after < 0.5,
+            "spikes should be blanked, got {peak_after}"
+        );
     }
 
     #[test]
@@ -1017,8 +1024,8 @@ mod tests {
         let mut carrier = Nco::new(120.0, fs);
         let iq: Vec<Complex32> = (0..96_000)
             .map(|i| {
-                let m = 1.0
-                    + 0.3 * (2.0 * std::f32::consts::PI * 800.0 * i as f32 / fs as f32).sin();
+                let m =
+                    1.0 + 0.3 * (2.0 * std::f32::consts::PI * 800.0 * i as f32 / fs as f32).sin();
                 carrier.next() * m * 0.5
             })
             .collect();
@@ -1055,9 +1062,15 @@ mod tests {
         let bin = |f: f32| (f / fs * 512.0).round() as usize;
         // well inside the stopbands, expect heavy attenuation
         assert!(after[bin(60.0)] < before[bin(60.0)] - 10.0, "HP cuts lows");
-        assert!(after[bin(8000.0)] < before[bin(8000.0)] - 20.0, "LP cuts highs");
+        assert!(
+            after[bin(8000.0)] < before[bin(8000.0)] - 20.0,
+            "LP cuts highs"
+        );
         // passband roughly intact (allow a few dB)
-        assert!(after[bin(1000.0)] > before[bin(1000.0)] - 6.0, "passband kept");
+        assert!(
+            after[bin(1000.0)] > before[bin(1000.0)] - 6.0,
+            "passband kept"
+        );
     }
 
     #[test]
@@ -1085,8 +1098,7 @@ mod tests {
             let tone = db[tone_bin - 1..=tone_bin + 1]
                 .iter()
                 .fold(f32::MIN, |a, &b| a.max(b));
-            let noise: f32 =
-                db[100..200].iter().sum::<f32>() / 100.0; // 4.3–8.6 kHz: noise only
+            let noise: f32 = db[100..200].iter().sum::<f32>() / 100.0; // 4.3–8.6 kHz: noise only
             tone - noise
         };
 

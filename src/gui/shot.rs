@@ -160,8 +160,7 @@ fn demo_app(scene: &str, dark: bool) -> DeckApp {
                     .stores
                     .call_history
                     .push_back(crate::session::CallRecord {
-                        at: chrono::Local::now()
-                            - chrono::Duration::seconds(40 * (i as i64 + 1)),
+                        at: chrono::Local::now() - chrono::Duration::seconds(40 * (i as i64 + 1)),
                         fields: f,
                         dur_s: *dur,
                     });
@@ -173,8 +172,14 @@ fn demo_app(scene: &str, dark: bool) -> DeckApp {
             fake_running(&mut app, ModeId::Pocsag, 169_650_000);
             fill_audio(&mut app, 11);
             let msgs = [
-                (1_234_567u32, "A2 Ambulancepost Aalsmeer Straatweg 21 lift vast"),
-                (2_002_412, "P 1 BDH-01 Liftopsluiting Marktplein 4 Zandvoort"),
+                (
+                    1_234_567u32,
+                    "A2 Ambulancepost Aalsmeer Straatweg 21 lift vast",
+                ),
+                (
+                    2_002_412,
+                    "P 1 BDH-01 Liftopsluiting Marktplein 4 Zandvoort",
+                ),
                 (1_990_007, "Testoproep regio 12 — geen actie vereist"),
                 (1_234_569, "GRIP1 oefening MELDKAMER conform draaiboek"),
             ];

@@ -71,6 +71,7 @@ impl FreqInput {
 }
 
 /// "145.800.000" style grouping (Hz).
+#[allow(dead_code)] // handy API, exercised by tests
 pub fn fmt_hz(hz: u64) -> String {
     let s = hz.to_string();
     let b = s.as_bytes();
