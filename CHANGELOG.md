@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Waterfall signal browser: automatic peak detection (noise-floor tracked,
+  DC-spike excluded, persistence-smoothed); tap/OK a peak to tune, RIGHT to
+  hand off
+- Hand-off: OPEN IN control / double-tap opens the tuned frequency in any
+  mode and starts RX
+- KC908-inspired: SPAN zoom (full/2/4/8x around the marker), MKR/PK
+  measurement readout on the scope, memory channels (saved from any mode,
+  starred in preset picker, persisted)
+
 ## 0.1.0 — 2026-07-06
 
 First release. deck is a fullscreen touch GUI that turns an SDR cyberdeck

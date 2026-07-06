@@ -34,7 +34,7 @@ drag the waterfall to retune, 44 px+ targets throughout.
 |---|---|
 | ![NFM](docs/shots/nfm.png) | ![DMR](docs/shots/dmr.png) |
 
-| RF waterfall (drag to tune) | Channel scanner with lockouts |
+| RF waterfall — peak browser, drag to tune, hand-off | Channel scanner with lockouts |
 |---|---|
 | ![Waterfall](docs/shots/waterfall.png) | ![Scanner](docs/shots/scanner.png) |
 
@@ -111,6 +111,13 @@ All on the monitor path, all adjustable live, all persisted per mode:
 - **HP/LP filters** — biquad cascades, 24 dB/oct, cutoff ladders
 - **Squelch** — RMS with hysteresis, S-meter with threshold marker
 - **AM sync detector** — PLL-based SAM for fading shortwave
+
+**Waterfall as launchpad:** deck auto-detects **peaks** in the band (noise-floor
+tracking, DC-spike filtered) and lists them under the fall — tap one to tune,
+or hand it straight off to any mode (`OPEN IN` / double-tap) and RX starts
+there. SPAN zooms 2.4 MHz → 300 kHz around the marker, with KC908-style
+MKR/PK level readouts. Any frequency can be saved as a **memory channel**
+(starred in the preset picker, persisted).
 
 Decoders always receive the *raw* demodulated audio — your listening comfort
 never degrades the decode.
@@ -220,8 +227,9 @@ interchangeable — point `[pipelines.rtlsdr] adsb = "…"` at whichever you run
 ## Roadmap
 
 Spectrum recording (IQ to disk) · stereo WFM · trunk-following via dsd-neo ·
-CTCSS/DCS squelch · band plan overlays · more SDRs (teach
-`device.rs::USB_IDS` + an IQ source template)
+CTCSS/DCS squelch · priority-channel scan · dBµV/field-strength calibration ·
+band plan overlays · more SDRs (teach `device.rs::USB_IDS` + an IQ source
+template)
 
 ## License
 

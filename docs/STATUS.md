@@ -2,7 +2,8 @@
 
 *Update this when pausing work so development can resume cold.*
 
-Last update: 2026-07-06 — **v0.1.0 tagged**
+Last update: 2026-07-06 — **v0.1.0 tagged** + post-tag: waterfall peak
+browser, OPEN IN hand-off, SPAN zoom, MKR/PK readout, memory channels
 
 ## Done (v0.1.0)
 
@@ -47,5 +48,10 @@ Last update: 2026-07-06 — **v0.1.0 tagged**
 
 ## Roadmap
 
-IQ recording · stereo WFM · CTCSS/DCS · trunk following · band plans ·
-more SDRs (HackRF/Airspy R2 via USB_IDS + iq_source template)
+IQ recording · stereo WFM · CTCSS/DCS · trunk following · priority-channel
+scan · dBµV calibration · band plans · more SDRs (HackRF/Airspy R2 via
+USB_IDS + iq_source template)
+
+KC908 manual mined for ideas (user-provided); adopted: span zoom, marker/peak
+readout, memories. Deliberately skipped for now: TX anything, field-strength
+calibration (needs cal tables), IF shift.
