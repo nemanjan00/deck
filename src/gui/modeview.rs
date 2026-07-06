@@ -148,7 +148,7 @@ fn ctl_value(app: &DeckApp, mode: ModeId, c: Ctl) -> String {
         Ctl::Rec => match app.session.stores.rec_since {
             Some(t) => {
                 let s = t.elapsed().as_secs();
-                format!("● {:02}:{:02}", s / 60, s % 60)
+                format!("• {:02}:{:02}", s / 60, s % 60)
             }
             None => "off".into(),
         },
@@ -521,18 +521,18 @@ pub fn draw(app: &mut DeckApp, ctx: &egui::Context, mode: ModeId) {
         .filter(|r| r.mode == mode)
         .map(|r| {
             let s = r.started.elapsed().as_secs();
-            format!("  ● RX {:02}:{:02}", s / 60, s % 60)
+            format!("  • RX {:02}:{:02}", s / 60, s % 60)
         })
         .unwrap_or_default();
     let title = format!("{}{}", def.label, elapsed);
     let _ = running;
     app.status_bar(ctx, &title, true);
     let hint = if app.mode_ui(mode).editing_freq {
-        "←→ digit · ↑↓ value · OK done"
+        "left/right digit · up/down value · OK done"
     } else if app.mode_ui(mode).list_mode {
-        "↑↓ select · OK open/jump · → lockout · BACK controls"
+        "up/down select · OK open/jump · RIGHT lockout · BACK controls"
     } else {
-        "↑↓ focus · ←→ adjust · OK toggle · BACK menu"
+        "up/down focus · left/right adjust · OK toggle · BACK menu"
     };
     app.hint_bar(ctx, hint);
 
@@ -619,7 +619,7 @@ fn draw_left(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, com
     let label = if running {
         "■  STOP"
     } else {
-        "▶  START RX"
+        "START RX"
     };
     if widgets::action_button(ui, th, label, running, rx_focused).clicked() {
         activate(app, mode, Ctl::Rx);
@@ -682,7 +682,7 @@ fn draw_left(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, com
             th,
             widgets::ControlRow {
                 label: "LIST",
-                value: format!("{count} ▸"),
+                value: format!("{count} >"),
                 active: in_list,
                 focused,
                 enabled: count > 0,
@@ -879,7 +879,7 @@ fn draw_audio_info(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Them
     });
     if app.session.stores.device_busy {
         ui.label(
-            RichText::new("⚠ SDR busy — another program may hold the device")
+            RichText::new("!! SDR busy — another program may hold the device")
                 .color(th.err)
                 .size(12.0),
         );
@@ -979,9 +979,9 @@ fn draw_pager(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
             }
             for (i, m) in app.session.stores.pagers.iter().enumerate() {
                 let (kind, body) = match &m.msg.content {
-                    PagerContent::Alpha(t) => ("α", t.clone()),
-                    PagerContent::Numeric(t) => ("#", t.clone()),
-                    PagerContent::ToneOnly => ("♪", "(tone only)".into()),
+                    PagerContent::Alpha(t) => ("A", t.clone()),
+                    PagerContent::Numeric(t) => ("N", t.clone()),
+                    PagerContent::ToneOnly => ("T", "(tone only)".into()),
                 };
                 let line = format!(
                     "{} {:>7} {} {}",
@@ -1213,7 +1213,7 @@ fn draw_scanner(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) 
                 ui.horizontal(|ui| {
                     let active = i == app.session.scan.cur;
                     let selected = in_list && i == sel;
-                    let mark = if active { "▶" } else { " " };
+                    let mark = if active { ">" } else { " " };
                     let line = format!(
                         "{mark} {:<14} {:>12}  hits {:>3}",
                         c.label,
@@ -1246,7 +1246,7 @@ fn draw_scanner(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) 
                     let lock_resp =
                         ui.add(
                             egui::Button::new(
-                                RichText::new(if c.locked { "⊘" } else { "•" })
+                                RichText::new(if c.locked { "x" } else { "•" })
                                     .color(if c.locked { th.err } else { th.text_faint }),
                             )
                             .small()

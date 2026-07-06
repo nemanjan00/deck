@@ -76,7 +76,7 @@ pub fn draw_splash(app: &mut DeckApp, ctx: &egui::Context, since: Instant) {
 pub fn draw_devices(app: &mut DeckApp, ctx: &egui::Context) {
     let th = app.th.clone();
     app.status_bar(ctx, "Devices", true);
-    app.hint_bar(ctx, "↑↓ select · OK activate · BACK menu");
+    app.hint_bar(ctx, "up/down select · OK activate · BACK menu");
     let devices = app.session.devices.clone();
     let active = app.session.active_dev;
     let focus = app.devices_focus;
@@ -112,7 +112,7 @@ pub fn draw_devices(app: &mut DeckApp, ctx: &egui::Context) {
                                         RichText::new(format!(
                                             "{}{}",
                                             d.kind.label(),
-                                            if is_active { "  ● active" } else { "" }
+                                            if is_active { "  • active" } else { "" }
                                         ))
                                         .strong()
                                         .color(if is_active { th.accent } else { th.text }),
@@ -162,7 +162,7 @@ pub fn draw_devices(app: &mut DeckApp, ctx: &egui::Context) {
             }
             ui.add_space(6.0);
             if ui
-                .button(RichText::new("↻  rescan USB").color(th.accent2))
+                .button(RichText::new("rescan USB").color(th.accent2))
                 .clicked()
             {
                 rescan = true;
@@ -178,7 +178,7 @@ pub fn draw_devices(app: &mut DeckApp, ctx: &egui::Context) {
                 for t in crate::pipeline::KNOWN_TOOLS {
                     let ok = app.session.tools.has(t);
                     ui.label(
-                        RichText::new(format!("{} {t}", if ok { "✓" } else { "✗" }))
+                        RichText::new(format!("{} {t}", if ok { "+" } else { "-" }))
                             .font(FontId::monospace(11.5))
                             .color(if ok { th.ok } else { th.text_faint }),
                     );
@@ -250,7 +250,7 @@ pub fn draw_doctor(app: &mut DeckApp, ctx: &egui::Context) {
         .frame(egui::Frame::none().fill(th.bg).inner_margin(10.0))
         .show(ctx, |ui| {
             ui.horizontal(|ui| {
-                if ui.button("↻ refresh").clicked() {
+                if ui.button("refresh").clicked() {
                     app.doctor.report = Some(crate::doctor::report(&app.session.cfg));
                 }
                 let testing = app
@@ -262,7 +262,7 @@ pub fn draw_doctor(app: &mut DeckApp, ctx: &egui::Context) {
                 if testing {
                     ui.spinner();
                     ui.label(RichText::new("selftest running…").color(th.text_dim));
-                } else if ui.button("▶ run selftest (sim → real decoders)").clicked() {
+                } else if ui.button("run selftest (sim -> real decoders)").clicked() {
                     run_selftest = true;
                 }
             });

@@ -485,7 +485,7 @@ impl DeckApp {
                     );
                     if let Some(mode) = self.running_mode() {
                         if self.screen != Screen::Mode(mode) {
-                            let label = format!("● {}", mode_def(mode).label);
+                            let label = format!("• {}", mode_def(mode).label);
                             let resp = ui.add(
                                 egui::Label::new(
                                     egui::RichText::new(label).color(th.ok).size(13.0),
@@ -498,7 +498,7 @@ impl DeckApp {
                         }
                     }
                     if self.session.stores.rec_path.is_some() {
-                        ui.label(egui::RichText::new("● REC").color(th.rec).size(13.0));
+                        ui.label(egui::RichText::new("• REC").color(th.rec).size(13.0));
                     }
 
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -663,7 +663,7 @@ impl DeckApp {
                 let blocked = self.support.get(&m).cloned().flatten();
                 let running = self.running_mode() == Some(m);
                 let sub = if running {
-                    "● RX".to_string()
+                    "• RX".to_string()
                 } else if blocked.is_some() {
                     "needs tools".to_string()
                 } else {

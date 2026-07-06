@@ -652,22 +652,20 @@ impl Session {
                     }
                 }
             }
-            ViewKind::Voice => {
-                if src != LineSrc::Stderr {
-                    let fields = crate::parse::dsd::parse_line(&text);
-                    if !fields.is_empty() {
-                        self.stores.decoded += 1;
-                        let now = Instant::now();
-                        if let Some(c) = &mut self.stores.call {
-                            c.fields.merge(fields);
-                            c.last = now;
-                        } else {
-                            self.stores.call = Some(LiveCall {
-                                fields,
-                                started: now,
-                                last: now,
-                            });
-                        }
+            ViewKind::Voice if src != LineSrc::Stderr => {
+                let fields = crate::parse::dsd::parse_line(&text);
+                if !fields.is_empty() {
+                    self.stores.decoded += 1;
+                    let now = Instant::now();
+                    if let Some(c) = &mut self.stores.call {
+                        c.fields.merge(fields);
+                        c.last = now;
+                    } else {
+                        self.stores.call = Some(LiveCall {
+                            fields,
+                            started: now,
+                            last: now,
+                        });
                     }
                 }
             }
