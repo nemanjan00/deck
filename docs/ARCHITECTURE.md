@@ -100,8 +100,8 @@ See `docs/ADDING_MODES.md` for a worked example.
 - `gui/icons.rs` — vector icons painted with egui primitives (no assets).
 - `gui/widgets.rs` — tile, digit-wheel freq tuner (drag/scroll per digit),
   spectrum, waterfall (texture), S-meter, flat buttons, status bar.
-- `gui/screens/` — menu (tile grid), mode screens per `ViewKind`, devices,
-  doctor, power menu, splash.
+- `gui/modeview.rs` — the per-mode screen (controls + viz + view content);
+  `gui/misc.rs` — splash, devices, doctor, power menu.
 - `gui/shot.rs` + `gui/raster.rs` — headless screenshots: egui → tessellate →
   own CPU rasterizer → PNG. No GPU needed; also serves as a UI smoke test.
 

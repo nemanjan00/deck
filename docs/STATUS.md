@@ -2,40 +2,50 @@
 
 *Update this when pausing work so development can resume cold.*
 
-Last update: 2026-07-06 (pre-first-build)
+Last update: 2026-07-06 — **v0.1.0 tagged**
 
-## Done
+## Done (v0.1.0)
 
-- [x] Core: device autodetect, config/state, mode registry, plan resolver
-- [x] Radio DSP + RX engine (IQ-hub), NR/NB/auto-notch, filters, squelch,
-      AM env+sync, recording (squelch-aware WAV)
-- [x] Parsers: multimon POCSAG/APRS, dsd call fields, SBS aircraft store
-- [x] Simulator: IQ band compositor (all profiles), POCSAG/AX.25/Baudot
-      encoders with decode-back tests, SBS fleet, dsd-style line feeds
-- [x] Session layer: lifecycle, retune, scanner brain, stores, persistence
-- [x] doctor report + selftest
-- [x] sys integration: battery/volume/power
+- [x] Core: sysfs device autodetect, config/state, mode registry, plan resolver
+- [x] IQ-hub RX engine: NCO tune / decimate / NFM·WFM·AM(+SAM)·USB·LSB demod,
+      NR / NB / auto-notch / HP·LP / squelch, squelch-aware WAV recording
+- [x] Decoder integration via stdin audio: dsd-neo, multimon-ng, sox+minimodem;
+      ADS-B via SBS :30003 (dump1090/readsb/rtl1090)
+- [x] Parsers: multimon POCSAG/APRS, dsd call fields (slot/CC/TG/RID/NAC/RAN),
+      SBS aircraft store — all tolerant, all tested
+- [x] Simulator: IQ band compositor (BCH-correct POCSAG, AX.25/AFSK, Baudot
+      RTTY, AM/SSB/WFM/NBFM babble, carriers), line feeds, standalone IQ gen
+- [x] Session layer: lifecycle, instant in-band retune, scanner brain
+      (dwell/hold/lockouts persisted), typed stores, run-id event filtering
+- [x] egui GUI: tile menu w/ painted vector icons, digit-wheel tuner,
+      spectrum/waterfall (drag-to-tune), call card, tables, scanner view,
+      dark+light flat themes, splash, battery/volume/clock, power menu,
+      full d-pad operation, 44px+ touch targets, square-screen layouts
+- [x] `deck shot` headless CPU rasterizer (README screenshots + UI smoke)
+- [x] doctor report + sim→decoder selftest
+- [x] 65 tests green · clippy clean · fmt clean
+- [x] README (screenshot gallery, mermaid), ADDING_MODES, CHANGELOG, CI +
+      release workflows (x86_64 + aarch64)
 
-## In progress
+## Field-testing TODO (needs real hardware/decoders)
 
-- [ ] egui GUI (`src/gui/`): theme, icons, widgets, screens, shot/raster
-- [ ] `main.rs` (clap dispatch)
+- [ ] Verify `airspyhf_rx` flags + output format against a real HF+
+      (template overridable; Doctor shows resolved command)
+- [ ] Verify dsd-neo frame flags on an installed build (`-fs -fy -fd -fi -f1 -fz`)
+- [ ] Run `deck doctor --selftest` on a box with multimon-ng/sox/minimodem
+- [ ] GUI on target devices (GL/GLES via eframe glow); `--windowed` for desks
+- [ ] Scanner dwell/hold tuning against live PMR/2m traffic
 
-## Next
+## Known caveats
 
-- [ ] First build + `cargo test` + clippy pass (expect iteration)
-- [ ] `deck shot` screenshot set (dark+light, big + 480×480)
-- [ ] README (rich, screenshots), ADDING_MODES.md, CHANGELOG
-- [ ] CI: build+test, release matrix (x86_64 + aarch64)
-- [ ] tag v0.1.0
+- WFM mono (no stereo pilot decode)
+- Scanner band-edge hops restart the source (~0.3–0.5 s); in-band instant
+- GUI screenshots use the built-in rasterizer (no GPU path exercised in CI)
+- Host-disk-full incident during development truncated 11 files mid-write;
+  fully recovered (git + rewrites). Lesson encoded: scripted patches now use
+  atomic temp+rename writes; commit cadence increased.
 
-## Known caveats to document / revisit
+## Roadmap
 
-- `airspyhf_rx` flag set varies between builds (`-r /dev/stdout`, output
-  format); template is config-overridable, doctor shows the resolved cmd.
-- dsd-neo frame flags (`-fs/-fy/-fd/-fi/-f1/-fz`) follow DSD-FME
-  conventions; verify against the installed build, override in `[decoders]`.
-- WFM is mono (no stereo pilot decode yet).
-- Scanner hop across band edges restarts the source (~0.3–0.5 s); hops
-  within ±1.2 MHz (RTL) / ±384 kHz (Airspy HF+) are instant.
-- GUI screenshots: `deck shot` uses the built-in CPU rasterizer, no GPU.
+IQ recording · stereo WFM · CTCSS/DCS · trunk following · band plans ·
+more SDRs (HackRF/Airspy R2 via USB_IDS + iq_source template)
