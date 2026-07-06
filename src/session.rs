@@ -93,11 +93,7 @@ pub fn update_peaks(peaks: &mut Vec<Peak>, spec: &[f32], center_hz: u64, rate: u
             continue;
         }
         let v = spec[i];
-        if v > thresh
-            && v >= spec[i - 1]
-            && v >= spec[i + 1]
-            && v > spec[i - 2]
-            && v > spec[i + 2]
+        if v > thresh && v >= spec[i - 1] && v >= spec[i + 1] && v > spec[i - 2] && v > spec[i + 2]
         {
             found.push((i, v));
         }
@@ -126,7 +122,11 @@ pub fn update_peaks(peaks: &mut Vec<Peak>, spec: &[f32], center_hz: u64, rate: u
                 p.hz = (p.hz + hz) / 2;
                 p.last = now;
             }
-            None => peaks.push(Peak { hz, db: v, last: now }),
+            None => peaks.push(Peak {
+                hz,
+                db: v,
+                last: now,
+            }),
         }
     }
     peaks.retain(|p| now.duration_since(p.last) < Duration::from_secs(6));

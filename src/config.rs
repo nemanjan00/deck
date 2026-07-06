@@ -135,6 +135,16 @@ pub struct PersistState {
     pub device: Option<String>,
     pub modes: HashMap<String, ModePersist>,
     pub lockouts: Vec<u64>,
+    /// saved memory channels (KC908-style), shown starred in preset pickers
+    pub memories: Vec<Memory>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq)]
+pub struct Memory {
+    pub label: String,
+    pub hz: u64,
+    /// mode key it was saved from
+    pub mode: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, Default)]

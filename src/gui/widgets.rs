@@ -306,6 +306,7 @@ pub struct WfTex {
     pub tex: Option<TextureHandle>,
     pub rev: u64,
     pub dark: bool,
+    pub window: (usize, usize),
 }
 
 impl Default for WfTex {
@@ -314,6 +315,7 @@ impl Default for WfTex {
             tex: None,
             rev: u64::MAX,
             dark: true,
+            window: (0, 0),
         }
     }
 }
@@ -325,6 +327,7 @@ pub fn waterfall(
     slot: &mut WfTex,
     height: f32,
     marker: Option<f32>,
+    window: Option<(usize, usize)>,
 ) -> Response {
     let (rect, resp) = ui.allocate_exact_size(
         Vec2::new(ui.available_width(), height),
@@ -342,12 +345,16 @@ pub fn waterfall(
         );
         return resp;
     }
-    if slot.rev != wf.rev || slot.dark != th.dark || slot.tex.is_none() {
+    let (wx, wlen) = window
+        .filter(|(s, l)| *l > 0 && s + l <= wf.width)
+        .unwrap_or((0, wf.width));
+    if slot.rev != wf.rev || slot.dark != th.dark || slot.window != (wx, wlen) || slot.tex.is_none()
+    {
         let h = wf.rows.len();
-        let mut img = ColorImage::new([wf.width, h], Color32::BLACK);
+        let mut img = ColorImage::new([wlen, h], Color32::BLACK);
         for (y, row) in wf.rows.iter().enumerate() {
-            for (xp, v) in row.iter().enumerate() {
-                img.pixels[y * wf.width + xp] = th.wf_color(*v);
+            for (xp, v) in row[wx..wx + wlen].iter().enumerate() {
+                img.pixels[y * wlen + xp] = th.wf_color(*v);
             }
         }
         match &mut slot.tex {
@@ -361,6 +368,7 @@ pub fn waterfall(
         }
         slot.rev = wf.rev;
         slot.dark = th.dark;
+        slot.window = (wx, wlen);
     }
     if let Some(tex) = &slot.tex {
         p.image(

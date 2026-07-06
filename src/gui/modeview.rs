@@ -32,6 +32,10 @@ pub enum Ctl {
     Log,
     /// waterfall hand-off: open the tuned frequency in another mode
     OpenIn,
+    /// waterfall display zoom (span)
+    Span,
+    /// save the tuned frequency as a memory channel
+    MemSave,
 }
 
 fn controls_for(mode: ModeId) -> Vec<Ctl> {
@@ -62,10 +66,44 @@ fn controls_for(mode: ModeId) -> Vec<Ctl> {
             v.push(Ctl::Pause);
         }
         if mode == ModeId::Waterfall {
+            v.push(Ctl::Span);
             v.push(Ctl::OpenIn);
         }
+        v.push(Ctl::MemSave);
     }
     v.push(Ctl::Log);
+    v
+}
+
+/// A row in the preset picker: built-in/config presets + starred memories.
+pub struct PresetItem {
+    pub label: String,
+    pub hz: u64,
+    /// Some(index into persist.memories) when this row is a saved memory
+    pub mem_idx: Option<usize>,
+}
+
+pub fn preset_items(app: &DeckApp, mode: ModeId) -> Vec<PresetItem> {
+    let mut v: Vec<PresetItem> = app
+        .session
+        .presets(mode)
+        .into_iter()
+        .map(|c| PresetItem {
+            label: c.label,
+            hz: c.hz,
+            mem_idx: None,
+        })
+        .collect();
+    let key = mode_def(mode).key;
+    for (i, m) in app.session.persist.memories.iter().enumerate() {
+        if m.mode == key {
+            v.push(PresetItem {
+                label: format!("* {}", m.label),
+                hz: m.hz,
+                mem_idx: Some(i),
+            });
+        }
+    }
     v
 }
 
@@ -73,12 +111,7 @@ fn controls_for(mode: ModeId) -> Vec<Ctl> {
 pub fn openin_candidates() -> Vec<ModeId> {
     crate::modes::MODES
         .iter()
-        .filter(|m| {
-            !matches!(
-                m.id,
-                ModeId::Waterfall | ModeId::Scanner | ModeId::Adsb
-            )
-        })
+        .filter(|m| !matches!(m.id, ModeId::Waterfall | ModeId::Scanner | ModeId::Adsb))
         .map(|m| m.id)
         .collect()
 }
@@ -113,6 +146,8 @@ fn ctl_label(c: Ctl) -> &'static str {
         Ctl::Pause => "SCAN",
         Ctl::Log => "LOG",
         Ctl::OpenIn => "OPEN IN",
+        Ctl::Span => "SPAN",
+        Ctl::MemSave => "MEMORY",
     }
 }
 
@@ -194,6 +229,18 @@ fn ctl_value(app: &DeckApp, mode: ModeId, c: Ctl) -> String {
         Ctl::OpenIn => ui
             .map(|u| format!("{} >", crate::freq::fmt_short(u.freq.hz)))
             .unwrap_or_else(|| ">".into()),
+        Ctl::Span => {
+            let rate = app
+                .session
+                .running
+                .as_ref()
+                .map(|r| r.rate)
+                .filter(|r| *r > 0)
+                .unwrap_or(2_400_000);
+            let span = rate >> ui.map(|u| u.span).unwrap_or(0).min(3);
+            crate::freq::fmt_short(u64::from(span))
+        }
+        Ctl::MemSave => format!("{} saved", app.session.persist.memories.len()),
     }
 }
 
@@ -257,6 +304,10 @@ fn adjust(app: &mut DeckApp, mode: ModeId, c: Ctl, dir: i32) {
                 ui.viz = ((ui.viz as i32 + dir).rem_euclid(n)) as u8;
                 return;
             }
+            Ctl::Span => {
+                ui.span = ((ui.span as i32 + dir).rem_euclid(4)) as u8;
+                return;
+            }
             _ => return,
         }
     }
@@ -295,6 +346,20 @@ fn activate(app: &mut DeckApp, mode: ModeId, c: Ctl) {
             let ui = app.mode_ui(mode);
             ui.openin_open = true;
             ui.openin_sel = 0;
+        }
+        Ctl::Span => adjust(app, mode, Ctl::Span, 1),
+        Ctl::MemSave => {
+            let hz = app.mode_ui(mode).freq.hz;
+            let key = mode_def(mode).key.to_string();
+            let n = app.session.persist.memories.len() + 1;
+            let label = format!("M{n} {}", crate::freq::fmt_short(hz));
+            app.session.persist.memories.push(crate::config::Memory {
+                label: label.clone(),
+                hz,
+                mode: key,
+            });
+            app.session.save();
+            app.session.set_status(format!("saved {label}"));
         }
         Ctl::Notch | Ctl::Mon | Ctl::Det => adjust(app, mode, c, 1),
         _ => adjust(app, mode, c, 1),
@@ -386,24 +451,38 @@ pub fn keys(
         return;
     }
 
-    // preset popup layer
+    // preset popup layer (built-ins + config extras + starred memories)
     if app.mode_ui(mode).preset_open {
-        let presets = app.session.presets(mode);
-        let ui = app.mode_ui(mode);
-        if up {
-            ui.preset_sel = ui.preset_sel.saturating_sub(1);
+        let items = preset_items(app, mode);
+        {
+            let ui = app.mode_ui(mode);
+            if up {
+                ui.preset_sel = ui.preset_sel.saturating_sub(1);
+            }
+            if down {
+                ui.preset_sel = (ui.preset_sel + 1).min(items.len().saturating_sub(1));
+            }
+            if esc {
+                ui.preset_open = false;
+            }
         }
-        if down {
-            ui.preset_sel = (ui.preset_sel + 1).min(presets.len().saturating_sub(1));
-        }
-        if esc {
-            ui.preset_open = false;
-        }
+        let sel = app.mode_ui(mode).preset_sel;
         if enter {
-            if let Some(p) = presets.get(ui.preset_sel) {
-                ui.freq.hz = p.hz;
+            if let Some(it) = items.get(sel) {
+                let hz = it.hz;
+                let ui = app.mode_ui(mode);
+                ui.freq.hz = hz;
                 ui.preset_open = false;
                 schedule_retune(app, mode);
+            }
+        }
+        if right {
+            // delete a memory entry (d-pad path)
+            if let Some(mi) = items.get(sel).and_then(|it| it.mem_idx) {
+                app.session.persist.memories.remove(mi);
+                app.session.save();
+                let u = app.mode_ui(mode);
+                u.preset_sel = u.preset_sel.saturating_sub(1);
             }
         }
         return;
@@ -706,11 +785,7 @@ fn draw_left(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, com
 
     // RX button (focus index 1 == ctls[0] == Rx)
     let rx_focused = focus == 1;
-    let label = if running {
-        "■  STOP"
-    } else {
-        "START RX"
-    };
+    let label = if running { "■  STOP" } else { "START RX" };
     if widgets::action_button(ui, th, label, running, rx_focused).clicked() {
         activate(app, mode, Ctl::Rx);
     }
@@ -848,11 +923,8 @@ fn draw_peaks(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
                     let selected = in_list && i == sel;
                     let near_tuned = hz.abs_diff(tuned) < 6_000;
                     let mark = if near_tuned { ">" } else { " " };
-                    let line = format!(
-                        "{mark} {:>13}  {:>5.0} dB",
-                        crate::freq::fmt_short(*hz),
-                        db
-                    );
+                    let line =
+                        format!("{mark} {:>13}  {:>5.0} dB", crate::freq::fmt_short(*hz), db);
                     let color = if *age < 1.5 { th.text } else { th.text_dim };
                     let resp = ui.add(
                         egui::Label::new(
@@ -871,11 +943,9 @@ fn draw_peaks(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
                         tune = Some(*hz);
                     }
                     let open = ui.add(
-                        egui::Button::new(
-                            RichText::new("open >").size(11.5).color(th.accent2),
-                        )
-                        .small()
-                        .frame(false),
+                        egui::Button::new(RichText::new("open >").size(11.5).color(th.accent2))
+                            .small()
+                            .frame(false),
                     );
                     if open.clicked() {
                         handoff = Some(*hz);
@@ -906,17 +976,11 @@ fn draw_viz(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, h: f
     };
     let running = app.running_mode() == Some(mode);
 
-    // marker position for band displays
-    let band_marker = app.session.running.as_ref().and_then(|r| {
-        if r.rate == 0 {
-            return None;
-        }
-        let freq = app
-            .mode_ui
-            .get(&mode)
-            .map(|u| u.freq.hz)
-            .unwrap_or(r.freq_hz);
-        Some(0.5 + (freq as f64 - r.center_hz as f64) as f32 / r.rate as f32)
+    // visible window of the band (span zoom) + marker position within it
+    let win = band_window(app, mode);
+    let band_marker = win.map(|w| {
+        let freq = app.mode_ui.get(&mode).map(|u| u.freq.hz).unwrap_or(0) as f64;
+        (((freq - w.low_hz) / w.span_hz) as f32).clamp(0.0, 1.0)
     });
 
     let resp = match viz {
@@ -928,42 +992,145 @@ fn draw_viz(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, h: f
         1 => {
             let wf = &app.session.stores.wf_audio;
             let mut slot = std::mem::take(&mut app.wf_audio_tex);
-            let r = widgets::waterfall(ui, th, wf, &mut slot, h, None);
+            let r = widgets::waterfall(ui, th, wf, &mut slot, h, None, None);
             app.wf_audio_tex = slot;
             r
         }
         2 => {
-            let spec = app.session.stores.band_spec.clone();
-            widgets::spectrum(ui, th, h, &spec, None, (-80.0, 0.0), band_marker)
+            let spec = windowed_spec(app, win);
+            let r = widgets::spectrum(ui, th, h, &spec, None, (-80.0, 0.0), band_marker);
+            draw_readout(app, ui, mode, th, &r, win);
+            r
         }
         _ => {
             // band scope strip + waterfall
             let scope_h = (h * 0.3).clamp(50.0, 130.0);
-            let spec = app.session.stores.band_spec.clone();
+            let spec = windowed_spec(app, win);
             let r1 = widgets::spectrum(ui, th, scope_h, &spec, None, (-80.0, 0.0), band_marker);
+            draw_readout(app, ui, mode, th, &r1, win);
             let wf = &app.session.stores.wf_band;
             let mut slot = std::mem::take(&mut app.wf_band_tex);
-            let r2 = widgets::waterfall(ui, th, wf, &mut slot, h - scope_h - 6.0, band_marker);
+            let r2 = widgets::waterfall(
+                ui,
+                th,
+                wf,
+                &mut slot,
+                h - scope_h - 6.0,
+                band_marker,
+                win.map(|w| (w.start, w.len)),
+            );
             app.wf_band_tex = slot;
-            handle_band_drag(app, mode, &r1, running);
+            if let Some(w) = win {
+                handle_band_drag(app, mode, &r1, w.low_hz, w.span_hz);
+            }
             r2
         }
     };
+    let _ = running;
     if viz >= 2 {
-        handle_band_drag(app, mode, &resp, running);
+        if let Some(w) = win {
+            handle_band_drag(app, mode, &resp, w.low_hz, w.span_hz);
+        }
     }
 }
 
-/// Drag-to-tune + click-to-tune on band displays.
-fn handle_band_drag(app: &mut DeckApp, mode: ModeId, resp: &egui::Response, running: bool) {
-    let Some(r) = &app.session.running else {
-        return;
-    };
-    if !running || r.rate == 0 {
+#[derive(Clone, Copy)]
+struct BandWindow {
+    start: usize,
+    len: usize,
+    low_hz: f64,
+    span_hz: f64,
+}
+
+/// Which slice of the band spectrum is visible (span zoom, marker-centered).
+fn band_window(app: &DeckApp, mode: ModeId) -> Option<BandWindow> {
+    let r = app.session.running.as_ref()?;
+    if r.rate == 0 {
+        return None;
+    }
+    let n = app.session.stores.band_spec.len();
+    if n < 16 {
+        return None;
+    }
+    let span_pow = app.mode_ui.get(&mode).map(|u| u.span).unwrap_or(0).min(3) as usize;
+    let len = (n >> span_pow).max(16);
+    let bin_hz = f64::from(r.rate) / n as f64;
+    let band_low = r.center_hz as f64 - f64::from(r.rate) / 2.0;
+    let freq = app
+        .mode_ui
+        .get(&mode)
+        .map(|u| u.freq.hz)
+        .unwrap_or(r.freq_hz) as f64;
+    let marker_bin = ((freq - band_low) / bin_hz) as i64;
+    let start = (marker_bin - len as i64 / 2).clamp(0, (n - len) as i64) as usize;
+    Some(BandWindow {
+        start,
+        len,
+        low_hz: band_low + start as f64 * bin_hz,
+        span_hz: len as f64 * bin_hz,
+    })
+}
+
+fn windowed_spec(app: &DeckApp, win: Option<BandWindow>) -> Vec<f32> {
+    let spec = &app.session.stores.band_spec;
+    match win {
+        Some(w) if w.start + w.len <= spec.len() => spec[w.start..w.start + w.len].to_vec(),
+        _ => spec.clone(),
+    }
+}
+
+/// KC908-style measurement overlay: marker frequency + level, strongest peak.
+fn draw_readout(
+    app: &DeckApp,
+    ui: &egui::Ui,
+    mode: ModeId,
+    th: &Theme,
+    resp: &egui::Response,
+    win: Option<BandWindow>,
+) {
+    let Some(w) = win else { return };
+    let spec = &app.session.stores.band_spec;
+    if spec.is_empty() {
         return;
     }
-    let rate = r.rate as f64;
-    let center = r.center_hz as f64;
+    let freq = app.mode_ui.get(&mode).map(|u| u.freq.hz).unwrap_or(0);
+    let n = spec.len();
+    let band_low = w.low_hz - w.start as f64 * (w.span_hz / w.len as f64);
+    let bin = (((freq as f64 - band_low) / (w.span_hz / w.len as f64)) as usize).min(n - 1);
+    let level = spec
+        .get(bin.saturating_sub(1)..(bin + 2).min(n))
+        .map(|s| s.iter().fold(f32::MIN, |a, &b| a.max(b)))
+        .unwrap_or(-80.0);
+    let p = ui.painter();
+    p.text(
+        resp.rect.left_top() + egui::vec2(8.0, 6.0),
+        Align2::LEFT_TOP,
+        format!("MKR {}  {level:>4.0} dB", crate::freq::fmt_short(freq)),
+        FontId::monospace(11.5),
+        th.warn,
+    );
+    if let Some(pk) = app.session.stores.peaks.first() {
+        p.text(
+            resp.rect.right_top() + egui::vec2(-8.0, 6.0),
+            Align2::RIGHT_TOP,
+            format!("PK {}  {:>4.0} dB", crate::freq::fmt_short(pk.hz), pk.db),
+            FontId::monospace(11.5),
+            th.accent2,
+        );
+    }
+}
+
+/// Drag-to-tune + click-to-tune on band displays (window/zoom aware).
+fn handle_band_drag(
+    app: &mut DeckApp,
+    mode: ModeId,
+    resp: &egui::Response,
+    low_hz: f64,
+    span_hz: f64,
+) {
+    if span_hz <= 0.0 {
+        return;
+    }
     let w = resp.rect.width() as f64;
     if resp.double_clicked() && mode == ModeId::Waterfall {
         let u = app.mode_ui(mode);
@@ -971,7 +1138,7 @@ fn handle_band_drag(app: &mut DeckApp, mode: ModeId, resp: &egui::Response, runn
         u.openin_sel = 0;
     }
     if resp.dragged() {
-        let dhz = -resp.drag_delta().x as f64 / w * rate;
+        let dhz = -resp.drag_delta().x as f64 / w * span_hz;
         let cur = app.mode_ui(mode).freq.hz as f64;
         let new = ((cur + dhz) / 100.0).round() * 100.0;
         app.mode_ui(mode).freq.hz = (new.max(0.0) as u64).min(crate::freq::MAX_HZ);
@@ -979,7 +1146,7 @@ fn handle_band_drag(app: &mut DeckApp, mode: ModeId, resp: &egui::Response, runn
     } else if resp.clicked() {
         if let Some(pos) = resp.interact_pointer_pos() {
             let rel = ((pos.x - resp.rect.min.x) as f64 / w).clamp(0.0, 1.0);
-            let hz = center + (rel - 0.5) * rate;
+            let hz = low_hz + rel * span_hz;
             let hz = ((hz / 1000.0).round() * 1000.0).max(0.0) as u64;
             app.mode_ui(mode).freq.hz = hz.min(crate::freq::MAX_HZ);
             schedule_retune(app, mode);
@@ -1462,9 +1629,10 @@ fn draw_preset_popup(app: &mut DeckApp, ctx: &egui::Context, mode: ModeId, th: &
     if !app.mode_ui(mode).preset_open {
         return;
     }
-    let presets = app.session.presets(mode);
+    let items = preset_items(app, mode);
     let sel = app.mode_ui(mode).preset_sel;
     let mut chosen: Option<u64> = None;
+    let mut delete: Option<usize> = None;
     let mut close = false;
     egui::Area::new(egui::Id::new("presets"))
         .anchor(Align2::CENTER_CENTER, Vec2::ZERO)
@@ -1475,26 +1643,43 @@ fn draw_preset_popup(app: &mut DeckApp, ctx: &egui::Context, mode: ModeId, th: &
                 .rounding(10.0)
                 .inner_margin(12.0)
                 .show(ui, |ui| {
-                    ui.label(RichText::new("PRESETS").size(11.0).color(th.text_faint));
-                    for (i, p) in presets.iter().enumerate() {
+                    ui.label(
+                        RichText::new("PRESETS · * = memory (RIGHT/x deletes)")
+                            .size(11.0)
+                            .color(th.text_faint),
+                    );
+                    for (i, it) in items.iter().enumerate() {
                         let selected = i == sel;
-                        let line = format!("{:<14} {:>12}", p.label, crate::freq::fmt_short(p.hz));
-                        let resp = ui.add(
-                            egui::Label::new(
-                                RichText::new(line)
-                                    .font(FontId::monospace(14.0))
-                                    .color(if selected { th.sel_fg } else { th.text })
-                                    .background_color(if selected {
-                                        th.sel_bg
-                                    } else {
-                                        egui::Color32::TRANSPARENT
-                                    }),
-                            )
-                            .sense(Sense::click()),
-                        );
-                        if resp.clicked() {
-                            chosen = Some(p.hz);
-                        }
+                        let line =
+                            format!("{:<16} {:>12}", it.label, crate::freq::fmt_short(it.hz));
+                        ui.horizontal(|ui| {
+                            let resp = ui.add(
+                                egui::Label::new(
+                                    RichText::new(line)
+                                        .font(FontId::monospace(14.0))
+                                        .color(if selected { th.sel_fg } else { th.text })
+                                        .background_color(if selected {
+                                            th.sel_bg
+                                        } else {
+                                            egui::Color32::TRANSPARENT
+                                        }),
+                                )
+                                .sense(Sense::click()),
+                            );
+                            if resp.clicked() {
+                                chosen = Some(it.hz);
+                            }
+                            if let Some(mi) = it.mem_idx {
+                                let del = ui.add(
+                                    egui::Button::new(RichText::new("x").size(12.0).color(th.err))
+                                        .small()
+                                        .frame(false),
+                                );
+                                if del.clicked() {
+                                    delete = Some(mi);
+                                }
+                            }
+                        });
                     }
                     ui.add_space(6.0);
                     if ui.button("close").clicked() {
@@ -1507,6 +1692,12 @@ fn draw_preset_popup(app: &mut DeckApp, ctx: &egui::Context, mode: ModeId, th: &
         u.freq.hz = hz;
         u.preset_open = false;
         schedule_retune(app, mode);
+    }
+    if let Some(mi) = delete {
+        if mi < app.session.persist.memories.len() {
+            app.session.persist.memories.remove(mi);
+            app.session.save();
+        }
     }
     if close {
         app.mode_ui(mode).preset_open = false;
@@ -1532,22 +1723,14 @@ fn draw_openin_popup(app: &mut DeckApp, ctx: &egui::Context, mode: ModeId, th: &
                 .inner_margin(12.0)
                 .show(ui, |ui| {
                     ui.label(
-                        RichText::new(format!(
-                            "OPEN {} IN",
-                            crate::freq::fmt_short(hz)
-                        ))
-                        .size(11.0)
-                        .color(th.text_faint),
+                        RichText::new(format!("OPEN {} IN", crate::freq::fmt_short(hz)))
+                            .size(11.0)
+                            .color(th.text_faint),
                     );
                     for (i, id) in candidates.iter().enumerate() {
                         let def = mode_def(*id);
                         let selected = i == sel;
-                        let blocked = app
-                            .support
-                            .get(id)
-                            .cloned()
-                            .flatten()
-                            .is_some();
+                        let blocked = app.support.get(id).cloned().flatten().is_some();
                         let line = format!("{:<8} {}", def.label, def.desc);
                         let color = if selected {
                             th.sel_fg

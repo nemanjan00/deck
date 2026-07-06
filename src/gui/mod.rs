@@ -49,6 +49,8 @@ pub struct ModeUi {
     /// "open this frequency in another mode" picker (waterfall hand-off)
     pub openin_open: bool,
     pub openin_sel: usize,
+    /// waterfall display zoom: rate >> span (0 = full band)
+    pub span: u8,
     pub ctl_drag: f32,
 }
 
@@ -70,6 +72,7 @@ impl ModeUi {
             preset_sel: 0,
             openin_open: false,
             openin_sel: 0,
+            span: 0,
             ctl_drag: 0.0,
         }
     }
