@@ -265,6 +265,13 @@ pub fn resolve(
         return Some(extern_plan(t, Some("external pipeline from config".into()), tools));
     }
 
+    // The simulator can't synthesize real C4FM/4FSK — digital voice on the
+    // sim device always runs the decoded-line feed.
+    if dev.kind == SdrKind::Sim && matches!(mode_def(mode).view, crate::modes::ViewKind::Voice) {
+        let t = extern_template(dev.kind, mode)?;
+        return Some(extern_plan(t, Some("voice sim runs as a decoder feed".into()), tools));
+    }
+
     match m.pipe {
         PipeKind::Extern => {
             let t = extern_template(dev.kind, mode)?;
@@ -431,6 +438,11 @@ pub enum AppEvent {
     SbsStatus {
         run: u64,
         note: String,
+    },
+    /// recording started (Some(path)) or stopped/failed (None)
+    Rec {
+        run: u64,
+        path: Option<String>,
     },
 }
 

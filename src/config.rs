@@ -59,12 +59,17 @@ impl Default for UiCfg {
 #[serde(default)]
 pub struct AudioCfg {
     /// "auto" or a sink command template, e.g.
-    /// "aplay -q -t raw -f S16_LE -r {rate} -c 1 -"
+    /// "paplay --raw --rate={rate} --format=s16le --channels=1"
     pub sink: String,
+    /// recordings directory ("" = XDG music dir /deck)
+    pub record_dir: String,
 }
 impl Default for AudioCfg {
     fn default() -> Self {
-        Self { sink: "auto".into() }
+        Self {
+            sink: "auto".into(),
+            record_dir: String::new(),
+        }
     }
 }
 

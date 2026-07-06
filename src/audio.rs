@@ -44,6 +44,8 @@ pub struct Knobs {
     pub mute: AtomicBool,
     /// AM detector: envelope (false) or synchronous (true)
     pub sync_det: AtomicBool,
+    /// Some(path) = record the monitor audio to this WAV; None = stop.
+    pub record: Mutex<Option<std::path::PathBuf>>,
 }
 
 pub fn f32_bits(v: f32) -> u32 {
@@ -66,6 +68,7 @@ impl Knobs {
             squelch: AtomicU32::new(0),
             mute: AtomicBool::new(false),
             sync_det: AtomicBool::new(false),
+            record: Mutex::new(None),
         })
     }
 }
@@ -349,6 +352,7 @@ fn pump(
     let mut last_audio = Instant::now() - Duration::from_secs(1);
     let mut last_iq = Instant::now() - Duration::from_secs(1);
     let mut gate_open = false;
+    let mut recorder: Option<crate::rec::WavWriter> = None;
 
     let bytes_per = match cfg.format {
         IqFormat::Cu8 => 2usize,
@@ -360,10 +364,10 @@ fn pump(
     // ---- pump loop ------------------------------------------------------
     loop {
         if stop.load(Ordering::Relaxed) {
-            return;
+            break;
         }
         let n = match stdout.read(&mut raw) {
-            Ok(0) | Err(_) => return,
+            Ok(0) | Err(_) => break,
             Ok(n) => n,
         };
         let mut bytes: Vec<u8> = Vec::with_capacity(leftover.len() + n);
@@ -398,7 +402,7 @@ fn pump(
             last_iq = Instant::now();
             let spec = iq_fft.iq_db(&iq[..1024]);
             if tx.send(AppEvent::Iq { run, spec }).is_err() {
-                return;
+                break;
             }
         }
 
@@ -509,6 +513,47 @@ fn pump(
             }
         }
 
+        // recording (squelch-aware: closed-gate static isn't written)
+        let want_rec = knobs.record.lock().ok().and_then(|g| g.clone());
+        match (&want_rec, recorder.is_some()) {
+            (Some(path), false) => match crate::rec::WavWriter::create(path, 48_000) {
+                Ok(w) => {
+                    let _ = tx.send(AppEvent::Rec {
+                        run,
+                        path: Some(w.path.to_string_lossy().into_owned()),
+                    });
+                    recorder = Some(w);
+                }
+                Err(e) => {
+                    let _ = tx.send(AppEvent::Line {
+                        run,
+                        src: crate::pipeline::LineSrc::Stderr,
+                        text: format!("deck: recording failed: {e}"),
+                    });
+                    if let Ok(mut g) = knobs.record.lock() {
+                        *g = None;
+                    }
+                    let _ = tx.send(AppEvent::Rec { run, path: None });
+                }
+            },
+            (None, true) => {
+                if let Some(w) = recorder.take() {
+                    let _ = w.finalize();
+                }
+                let _ = tx.send(AppEvent::Rec { run, path: None });
+            }
+            _ => {}
+        }
+        if let Some(w) = &mut recorder {
+            if gate_open && w.write_s16(&dsp::f32_to_s16(&mon)).is_err() {
+                recorder = None;
+                if let Ok(mut g) = knobs.record.lock() {
+                    *g = None;
+                }
+                let _ = tx.send(AppEvent::Rec { run, path: None });
+            }
+        }
+
         // audio spectrum frames (~15 fps) from the monitor path
         audio_acc.extend_from_slice(&mon);
         if audio_acc.len() >= 512 && last_audio.elapsed() > Duration::from_millis(66) {
@@ -524,10 +569,14 @@ fn pump(
                 })
                 .is_err()
             {
-                return;
+                break;
             }
         } else if audio_acc.len() > 8192 {
             audio_acc.drain(..audio_acc.len() - 512);
         }
+    }
+    if let Some(w) = recorder.take() {
+        let _ = w.finalize();
+        let _ = tx.send(AppEvent::Rec { run, path: None });
     }
 }
