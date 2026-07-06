@@ -18,6 +18,8 @@ pub struct Aircraft {
     pub vr: Option<i32>,
     pub squawk: String,
     pub msgs: u32,
+    /// recent positions (lat, lon), oldest first — the radar trail
+    pub trail: Vec<(f64, f64)>,
 }
 
 pub struct AircraftStore {
@@ -76,6 +78,17 @@ impl AircraftStore {
         ) {
             ac.lat = Some(la);
             ac.lon = Some(lo);
+            if ac
+                .trail
+                .last()
+                .map(|(a, b)| (a - la).abs() > 1e-5 || (b - lo).abs() > 1e-5)
+                .unwrap_or(true)
+            {
+                ac.trail.push((la, lo));
+                if ac.trail.len() > 24 {
+                    ac.trail.remove(0);
+                }
+            }
         }
         if let Some(v) = get(16).and_then(|s| s.parse::<f64>().ok()) {
             ac.vr = Some(v as i32);

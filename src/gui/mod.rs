@@ -307,6 +307,34 @@ impl DeckApp {
             }
         }
 
+        // completed in-app screenshots (F12) land as events
+        let shot = ctx.input(|i| {
+            i.events.iter().find_map(|e| match e {
+                egui::Event::Screenshot { image, .. } => Some(image.clone()),
+                _ => None,
+            })
+        });
+        if let Some(img) = shot {
+            let dir =
+                crate::rec::recordings_dir(&self.session.cfg.audio.record_dir).join("screens");
+            let name = format!(
+                "deck_screen_{}.png",
+                chrono::Local::now().format("%Y%m%d-%H%M%S")
+            );
+            let path = dir.join(name);
+            let mut rgba = Vec::with_capacity(img.pixels.len() * 4);
+            for c in &img.pixels {
+                rgba.extend_from_slice(&[c.r(), c.g(), c.b(), 255]);
+            }
+            let [w, h] = img.size;
+            match raster::write_png(&path, w as u32, h as u32, &rgba) {
+                Ok(()) => self
+                    .session
+                    .set_status(format!("screenshot: {}", path.display())),
+                Err(e) => self.session.set_status(format!("screenshot failed: {e}")),
+            }
+        }
+
         if self.nav_cooldown > 0 {
             self.nav_cooldown -= 1;
         } else {
@@ -346,6 +374,9 @@ impl DeckApp {
         if ctx.input(|i| i.key_pressed(Key::T)) {
             let dark = !self.dark;
             self.set_theme(dark);
+        }
+        if ctx.input(|i| i.key_pressed(Key::F12)) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Screenshot);
         }
         if ctx.input(|i| i.key_pressed(Key::F11)) {
             let fs = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));

@@ -71,6 +71,9 @@ fn controls_for(mode: ModeId) -> Vec<Ctl> {
         }
         v.push(Ctl::MemSave);
     }
+    if mode == ModeId::Adsb {
+        v.push(Ctl::Viz);
+    }
     v.push(Ctl::Log);
     v
 }
@@ -212,7 +215,14 @@ fn ctl_value(app: &DeckApp, mode: ModeId, c: Ctl) -> String {
             }
             None => "off".into(),
         },
-        Ctl::Viz => viz_label(ui.map(|u| u.viz).unwrap_or(0)).into(),
+        Ctl::Viz => {
+            let v = ui.map(|u| u.viz).unwrap_or(0);
+            if mode == ModeId::Adsb {
+                ["table", "radar"][(v as usize) % 2].into()
+            } else {
+                viz_label(v).into()
+            }
+        }
         Ctl::Pause => {
             if app.session.scan.phase == ScanPhase::Paused {
                 "paused".into()
@@ -300,7 +310,7 @@ fn adjust(app: &mut DeckApp, mode: ModeId, c: Ctl, dir: i32) {
             Ctl::Det => mp.det = if mp.det == 1 { 0 } else { 1 },
             Ctl::Mon => mp.monitor = !mp.monitor,
             Ctl::Viz => {
-                let n = 4;
+                let n = if mode == ModeId::Adsb { 2 } else { 4 };
                 ui.viz = ((ui.viz as i32 + dir).rem_euclid(n)) as u8;
                 return;
             }
@@ -583,7 +593,7 @@ fn list_keys(
     enter: bool,
     up: bool,
     down: bool,
-    _left: bool,
+    left: bool,
     right: bool,
 ) {
     let len = match view {
@@ -654,6 +664,10 @@ fn list_keys(
                     u.openin_sel = 0;
                     u.list_mode = false;
                 }
+                if left {
+                    let label = app.session.save_memory(mode, hz);
+                    app.session.set_status(format!("saved {label}"));
+                }
             }
         }
         ViewKind::Scanner => {
@@ -668,6 +682,10 @@ fn list_keys(
             }
             if right {
                 app.session.toggle_lockout(sel);
+            }
+            if left {
+                app.session.toggle_priority(sel);
+                app.session.save();
             }
         }
         _ => {}
@@ -884,7 +902,7 @@ fn draw_right(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
         ViewKind::Voice => draw_voice(app, ui, mode, th),
         ViewKind::Pager => draw_pager(app, ui, mode, th),
         ViewKind::Aprs => draw_aprs(app, ui, mode, th),
-        ViewKind::Adsb => draw_adsb(app, ui, th),
+        ViewKind::Adsb => draw_adsb(app, ui, mode, th),
         ViewKind::TextFeed => draw_textfeed(app, ui, th),
         ViewKind::Scanner => draw_scanner(app, ui, mode, th),
         ViewKind::Waterfall => draw_peaks(app, ui, mode, th),
@@ -899,8 +917,9 @@ fn draw_peaks(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
     let tuned = app.mode_ui(mode).freq.hz;
     let mut tune: Option<u64> = None;
     let mut handoff: Option<u64> = None;
+    let mut remember: Option<u64> = None;
     ui.label(
-        RichText::new("PEAKS · OK tune · RIGHT open in mode")
+        RichText::new("PEAKS · OK tune · RIGHT open in mode · LEFT save")
             .size(10.5)
             .color(th.text_faint),
     );
@@ -950,6 +969,14 @@ fn draw_peaks(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
                     if open.clicked() {
                         handoff = Some(*hz);
                     }
+                    let mem = ui.add(
+                        egui::Button::new(RichText::new("mem+").size(11.5).color(th.accent))
+                            .small()
+                            .frame(false),
+                    );
+                    if mem.clicked() {
+                        remember = Some(*hz);
+                    }
                 });
             }
         });
@@ -962,6 +989,10 @@ fn draw_peaks(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
         u.freq.hz = hz;
         u.openin_open = true;
         u.openin_sel = 0;
+    }
+    if let Some(hz) = remember {
+        let label = app.session.save_memory(mode, hz);
+        app.session.set_status(format!("saved {label}"));
     }
 }
 
@@ -1427,7 +1458,164 @@ fn draw_aprs(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
     }
 }
 
-fn draw_adsb(app: &mut DeckApp, ui: &mut egui::Ui, th: &Theme) {
+fn draw_adsb(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
+    if app.mode_ui(mode).viz % 2 == 1 {
+        draw_adsb_map(app, ui, th);
+        return;
+    }
+    draw_adsb_table(app, ui, th);
+}
+
+/// Offline radar map: range rings around home (or the traffic centroid),
+/// aircraft as track-rotated arrows with altitude coloring and trails.
+fn draw_adsb_map(app: &mut DeckApp, ui: &mut egui::Ui, th: &Theme) {
+    use eframe::egui::{Pos2, Vec2 as EVec2};
+    let now = Instant::now();
+    let rows = app.session.stores.aircraft.rows(now);
+    let (rect, _) = ui.allocate_exact_size(
+        EVec2::new(ui.available_width(), ui.available_height().max(120.0)),
+        Sense::hover(),
+    );
+    let p = ui.painter();
+    p.rect_filled(rect, 6.0, th.panel);
+
+    // center: configured home, else centroid of known positions
+    let cfg = &app.session.cfg.adsb;
+    let known: Vec<(f64, f64)> = rows.iter().filter_map(|(a, _)| a.lat.zip(a.lon)).collect();
+    let (clat, clon) = if cfg.lat.abs() > 0.01 || cfg.lon.abs() > 0.01 {
+        (cfg.lat, cfg.lon)
+    } else if !known.is_empty() {
+        (
+            known.iter().map(|k| k.0).sum::<f64>() / known.len() as f64,
+            known.iter().map(|k| k.1).sum::<f64>() / known.len() as f64,
+        )
+    } else {
+        p.text(
+            rect.center(),
+            Align2::CENTER_CENTER,
+            "no positions yet",
+            FontId::proportional(12.0),
+            th.text_faint,
+        );
+        return;
+    };
+    let km = |lat: f64, lon: f64| -> (f64, f64) {
+        (
+            (lon - clon) * 111.32 * clat.to_radians().cos(),
+            (lat - clat) * 110.57,
+        )
+    };
+    // scale: furthest aircraft, clamped
+    let max_km = known
+        .iter()
+        .map(|(la, lo)| {
+            let (x, y) = km(*la, *lo);
+            (x * x + y * y).sqrt()
+        })
+        .fold(15.0f64, f64::max)
+        .clamp(15.0, 500.0);
+    let radius = rect.width().min(rect.height()) * 0.47;
+    let px_per_km = f64::from(radius) / max_km;
+    let center = rect.center();
+    let to_px = |lat: f64, lon: f64| -> Pos2 {
+        let (x, y) = km(lat, lon);
+        Pos2::new(
+            center.x + (x * px_per_km) as f32,
+            center.y - (y * px_per_km) as f32,
+        )
+    };
+
+    // range rings at nice steps
+    let step = [10.0, 25.0, 50.0, 100.0, 200.0]
+        .into_iter()
+        .find(|s| max_km / s <= 3.2)
+        .unwrap_or(200.0);
+    let mut r = step;
+    while r <= max_km * 1.02 {
+        p.circle_stroke(center, (r * px_per_km) as f32, Stroke::new(1.0, th.grid));
+        p.text(
+            center + EVec2::new(2.0, -(r * px_per_km) as f32),
+            Align2::LEFT_BOTTOM,
+            format!("{r:.0} km"),
+            FontId::proportional(9.5),
+            th.text_faint,
+        );
+        r += step;
+    }
+    p.circle_filled(center, 2.5, th.warn); // home
+    p.text(
+        Pos2::new(center.x, rect.min.y + 4.0),
+        Align2::CENTER_TOP,
+        "N",
+        FontId::proportional(11.0),
+        th.text_dim,
+    );
+
+    for (ac, age) in &rows {
+        let (Some(la), Some(lo)) = (ac.lat, ac.lon) else {
+            continue;
+        };
+        let pos = to_px(la, lo);
+        if !rect.expand(-2.0).contains(pos) {
+            continue;
+        }
+        let color = match ac.alt.unwrap_or(0) {
+            a if a < 10_000 => th.warn,
+            a if a < 25_000 => th.accent,
+            _ => th.accent2,
+        };
+        let color = if *age > 20.0 {
+            color.linear_multiply(0.4)
+        } else {
+            color
+        };
+        // trail
+        if ac.trail.len() > 1 {
+            let pts: Vec<Pos2> = ac.trail.iter().map(|(a, b)| to_px(*a, *b)).collect();
+            p.add(egui::Shape::line(
+                pts,
+                Stroke::new(1.0, color.linear_multiply(0.35)),
+            ));
+        }
+        // track-rotated arrow
+        let ang = ac.trk.unwrap_or(0.0).to_radians() - std::f32::consts::FRAC_PI_2;
+        let dir = EVec2::angled(ang);
+        let side = EVec2::angled(ang + std::f32::consts::FRAC_PI_2);
+        p.add(egui::Shape::convex_polygon(
+            vec![
+                pos + dir * 7.0,
+                pos - dir * 4.0 + side * 4.0,
+                pos - dir * 4.0 - side * 4.0,
+            ],
+            color,
+            Stroke::NONE,
+        ));
+        let label = if ac.callsign.is_empty() {
+            ac.icao.clone()
+        } else {
+            ac.callsign.clone()
+        };
+        p.text(
+            pos + EVec2::new(8.0, -4.0),
+            Align2::LEFT_CENTER,
+            format!(
+                "{label} {}",
+                ac.alt.map(|a| format!("{}", a / 100)).unwrap_or_default()
+            ),
+            FontId::monospace(10.5),
+            th.text_dim,
+        );
+    }
+    p.text(
+        rect.left_bottom() + EVec2::new(8.0, -6.0),
+        Align2::LEFT_BOTTOM,
+        format!("{} aircraft · alt color: <100 <250 FL+", rows.len()),
+        FontId::proportional(10.0),
+        th.text_faint,
+    );
+}
+
+fn draw_adsb_table(app: &mut DeckApp, ui: &mut egui::Ui, th: &Theme) {
     let now = Instant::now();
     let stores = &app.session.stores;
     ui.horizontal(|ui| {
@@ -1547,6 +1735,7 @@ fn draw_scanner(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) 
     let in_list = app.mode_ui(mode).list_mode;
     let mut jump: Option<usize> = None;
     let mut lock: Option<usize> = None;
+    let mut prio: Option<usize> = None;
     egui::ScrollArea::vertical()
         .id_salt("chans")
         .auto_shrink([false, false])
@@ -1556,8 +1745,9 @@ fn draw_scanner(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) 
                     let active = i == app.session.scan.cur;
                     let selected = in_list && i == sel;
                     let mark = if active { ">" } else { " " };
+                    let pri = if c.priority { "P" } else { " " };
                     let line = format!(
-                        "{mark} {:<14} {:>12}  hits {:>3}",
+                        "{mark}{pri} {:<14} {:>12}  hits {:>3}",
                         c.label,
                         crate::freq::fmt_short(c.hz),
                         c.hits
@@ -1597,6 +1787,18 @@ fn draw_scanner(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) 
                     if lock_resp.clicked() {
                         lock = Some(i);
                     }
+                    let pri_resp = ui.add(
+                        egui::Button::new(RichText::new("P").size(11.0).color(if c.priority {
+                            th.accent2
+                        } else {
+                            th.text_faint
+                        }))
+                        .small()
+                        .frame(false),
+                    );
+                    if pri_resp.clicked() {
+                        prio = Some(i);
+                    }
                 });
             }
             if !app.session.scan.hits.is_empty() {
@@ -1622,6 +1824,10 @@ fn draw_scanner(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) 
     }
     if let Some(i) = lock {
         app.session.toggle_lockout(i);
+    }
+    if let Some(i) = prio {
+        app.session.toggle_priority(i);
+        app.session.save();
     }
 }
 

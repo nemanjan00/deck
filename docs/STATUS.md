@@ -2,8 +2,13 @@
 
 *Update this when pausing work so development can resume cold.*
 
-Last update: 2026-07-06 — **v0.1.0 tagged** + post-tag: waterfall peak
-browser, OPEN IN hand-off, SPAN zoom, MKR/PK readout, memory channels
+Last update: 2026-07-06 — v0.1.0 + waterfall browser/hand-off/span/readout,
+memories, scanner PRIORITY channel (LEFT/P toggles, revisited every 4 hops),
+peak->memory (LEFT/mem+), ADS-B offline RADAR view (VIEW control: rings,
+track arrows, alt colors, trails, home via [adsb] lat/lon), F12 in-app
+screenshot -> recordings/screens/.
+NEXT: regenerate shots (add adsb radar scene), README/CHANGELOG for the new
+batch, then re-tag or v0.2.0.
 
 ## Done (v0.1.0)
 

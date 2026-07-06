@@ -78,12 +78,17 @@ impl Default for AudioCfg {
 pub struct AdsbCfg {
     pub sbs_host: String,
     pub sbs_port: u16,
+    /// home position for the radar map (0,0 = auto-center on traffic)
+    pub lat: f64,
+    pub lon: f64,
 }
 impl Default for AdsbCfg {
     fn default() -> Self {
         Self {
             sbs_host: "127.0.0.1".into(),
             sbs_port: 30003,
+            lat: 0.0,
+            lon: 0.0,
         }
     }
 }
@@ -135,6 +140,8 @@ pub struct PersistState {
     pub device: Option<String>,
     pub modes: HashMap<String, ModePersist>,
     pub lockouts: Vec<u64>,
+    /// scanner priority channel (checked between hops)
+    pub priority: Option<u64>,
     /// saved memory channels (KC908-style), shown starred in preset pickers
     pub memories: Vec<Memory>,
 }

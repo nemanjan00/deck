@@ -242,6 +242,7 @@ pub struct ScanChan {
     pub label: String,
     pub hz: u64,
     pub locked: bool,
+    pub priority: bool,
     pub hits: u32,
 }
 
@@ -259,10 +260,12 @@ pub struct ScanState {
     pub phase_since: Instant,
     pub last_signal: Instant,
     pub hits: VecDeque<Timed<String>>,
+    /// hops since the priority channel was last visited
+    hops_since_priority: u32,
 }
 
 impl ScanState {
-    fn from_cfg(cfg: &Config, lockouts: &[u64]) -> Self {
+    fn from_cfg(cfg: &Config, lockouts: &[u64], priority: Option<u64>) -> Self {
         Self {
             channels: cfg
                 .scanner
@@ -272,6 +275,7 @@ impl ScanState {
                     label: c.label.clone(),
                     hz: c.hz,
                     locked: lockouts.contains(&c.hz),
+                    priority: priority == Some(c.hz),
                     hits: 0,
                 })
                 .collect(),
@@ -280,6 +284,7 @@ impl ScanState {
             phase_since: Instant::now(),
             last_signal: Instant::now(),
             hits: VecDeque::new(),
+            hops_since_priority: 0,
         }
     }
 }
@@ -317,7 +322,7 @@ impl Session {
                     .unwrap_or(devices.len().saturating_sub(1))
             });
         let (tx, rx) = std::sync::mpsc::channel();
-        let scan = ScanState::from_cfg(&cfg, &persist.lockouts);
+        let scan = ScanState::from_cfg(&cfg, &persist.lockouts, persist.priority);
         Self {
             cfg,
             cfg_error,
@@ -838,16 +843,31 @@ impl Session {
     }
 
     /// Advance the scanner by `dir` channels (skipping lockouts) and retune.
+    /// A priority channel, when set, is revisited every few hops.
     pub fn scan_step(&mut self, dir: i32) {
         let n = self.scan.channels.len();
         if n == 0 {
             return;
         }
         let mut idx = self.scan.cur;
-        for _ in 0..n {
-            idx = (idx as i64 + dir as i64).rem_euclid(n as i64) as usize;
-            if !self.scan.channels[idx].locked {
-                break;
+        let pri = self
+            .scan
+            .channels
+            .iter()
+            .position(|c| c.priority && !c.locked);
+        self.scan.hops_since_priority += 1;
+        if let Some(p) = pri.filter(|p| self.scan.hops_since_priority >= 4 && *p != self.scan.cur) {
+            idx = p;
+            self.scan.hops_since_priority = 0;
+        } else {
+            for _ in 0..n {
+                idx = (idx as i64 + dir as i64).rem_euclid(n as i64) as usize;
+                if !self.scan.channels[idx].locked {
+                    break;
+                }
+            }
+            if Some(idx) == pri {
+                self.scan.hops_since_priority = 0;
             }
         }
         self.scan.cur = idx;
@@ -856,6 +876,31 @@ impl Session {
         if let Err(e) = self.retune(hz) {
             self.set_status(e);
         }
+    }
+
+    /// Mark/unmark a channel as THE priority channel (persisted).
+    pub fn toggle_priority(&mut self, idx: usize) {
+        let Some(hz) = self.scan.channels.get(idx).map(|c| c.hz) else {
+            return;
+        };
+        let turn_off = self.persist.priority == Some(hz);
+        self.persist.priority = if turn_off { None } else { Some(hz) };
+        for c in &mut self.scan.channels {
+            c.priority = !turn_off && c.hz == hz;
+        }
+    }
+
+    /// Save a frequency as a memory channel; returns its label.
+    pub fn save_memory(&mut self, mode: ModeId, hz: u64) -> String {
+        let n = self.persist.memories.len() + 1;
+        let label = format!("M{n} {}", crate::freq::fmt_short(hz));
+        self.persist.memories.push(crate::config::Memory {
+            label: label.clone(),
+            hz,
+            mode: mode_def(mode).key.to_string(),
+        });
+        self.save();
+        label
     }
 
     pub fn toggle_lockout(&mut self, idx: usize) {
