@@ -32,6 +32,13 @@ lto = "thin"
 strip = true
 codegen-units = 1
 
+# keep local builds lean (target/ size matters on small decks too)
+[profile.dev]
+debug = false
+
+[profile.dev.package."*"]
+debug = false
+
 [[bin]]
 name = "deck"
 path = "src/main.rs"

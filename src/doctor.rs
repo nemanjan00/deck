@@ -1,7 +1,7 @@
 //! `deck doctor` — environment report and end-to-end selftest.
 
 use crate::config::Config;
-use crate::device::{detect, SdrKind};
+use crate::device::detect;
 use crate::modes::MODES;
 use crate::pipeline::{resolve, Plan, ToolReport};
 use std::fmt::Write as _;

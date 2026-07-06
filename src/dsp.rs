@@ -138,13 +138,6 @@ impl SpectralNr {
         }
     }
 
-    pub fn reset(&mut self) {
-        self.noise.iter_mut().for_each(|x| *x = 1e-4);
-        self.overlap.iter_mut().for_each(|x| *x = 0.0);
-        self.inbuf.clear();
-        self.frames_seen = 0;
-    }
-
     /// Process a chunk of f32 samples; returns processed samples (same rate,
     /// possibly different length due to hop buffering).
     pub fn process(&mut self, input: &[f32]) -> Vec<f32> {
@@ -190,11 +183,11 @@ impl SpectralNr {
 
         self.inv.process(&mut buf);
         let scale = 1.0 / NR_N as f32;
-        // overlap-add with synthesis window; hann + 50% overlap sums to 1
+        // overlap-add: hann analysis window at 50% overlap sums to 1,
+        // so no synthesis window is needed
         let mut y = vec![0.0f32; NR_HOP];
-        for i in 0..NR_N {
-            let v = buf[i].re * scale * self.window[i] * (2.0 / 1.0);
-            self.overlap[i] += v;
+        for (o, b) in self.overlap.iter_mut().zip(buf.iter()) {
+            *o += b.re * scale;
         }
         y.copy_from_slice(&self.overlap[..NR_HOP]);
         self.overlap.copy_within(NR_HOP.., 0);
@@ -473,24 +466,26 @@ impl FirDecimF32 {
 }
 
 /// Pick integer decimation factors from `in_rate` down to exactly `target`.
+/// Backtracking over {5,4,3,2} so ratios like 16 resolve to [4,4].
 pub fn decim_factors(in_rate: u32, target: u32) -> Option<Vec<usize>> {
-    let mut rate = in_rate;
-    let mut out = Vec::new();
-    while rate > target {
-        let mut picked = 0;
-        for f in [5usize, 4, 3, 2] {
-            if rate % (f as u32) == 0 && rate / (f as u32) >= target {
-                picked = f;
-                break;
+    if target == 0 || in_rate % target != 0 {
+        return None;
+    }
+    fn factor(ratio: u32) -> Option<Vec<usize>> {
+        if ratio == 1 {
+            return Some(Vec::new());
+        }
+        for f in [5u32, 4, 3, 2] {
+            if ratio % f == 0 {
+                if let Some(mut rest) = factor(ratio / f) {
+                    rest.insert(0, f as usize);
+                    return Some(rest);
+                }
             }
         }
-        if picked == 0 {
-            return None;
-        }
-        rate /= picked as u32;
-        out.push(picked);
+        None
     }
-    (rate == target).then_some(out)
+    factor(in_rate / target)
 }
 
 /// Linear-interpolation resampler (mono f32) — decoder rate adaptation.
@@ -808,6 +803,7 @@ impl SsbDemod {
 }
 
 /// s16le bytes → f32 samples in [-1,1)
+#[allow(dead_code)] // test-support / API symmetry with f32_to_s16
 pub fn s16_to_f32(bytes: &[u8]) -> Vec<f32> {
     bytes
         .chunks_exact(2)
@@ -1066,13 +1062,18 @@ mod tests {
 
     #[test]
     fn nr_improves_snr() {
-        // tone at 1 kHz buried in white noise; NR should raise tone/noise ratio
+        // speech-like scenario: noise-only first half trains the estimate,
+        // then a 1 kHz "voice" appears; NR should raise tone/noise ratio
         let fs = 22050.0;
         let mut rng = Rng::new(7);
-        let n = 22050;
+        let n = 33075;
         let sig: Vec<f32> = (0..n)
             .map(|i| {
-                let t = (2.0 * std::f32::consts::PI * 1000.0 * i as f32 / fs).sin() * 0.3;
+                let t = if i > n / 2 {
+                    (2.0 * std::f32::consts::PI * 1000.0 * i as f32 / fs).sin() * 0.3
+                } else {
+                    0.0
+                };
                 t + rng.gauss() as f32 * 0.1
             })
             .collect();

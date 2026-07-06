@@ -20,6 +20,7 @@ pub fn codeword(data21: u32) -> u32 {
 }
 
 /// Zero iff `w` is a valid POCSAG codeword (BCH syndrome + parity).
+#[allow(dead_code)] // proof/test support
 pub fn syndrome(w: u32) -> u32 {
     let mut rem = w >> 1;
     for i in (10..31).rev() {
@@ -43,6 +44,7 @@ fn message_codeword(bits20: u32) -> u32 {
 pub enum Content<'a> {
     Alpha(&'a str),
     Numeric(&'a str),
+    #[allow(dead_code)] // reserved for tone-only page simulation
     ToneOnly,
 }
 

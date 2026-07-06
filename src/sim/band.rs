@@ -109,10 +109,6 @@ impl Schedule {
         }
     }
 
-    pub fn always() -> Self {
-        Self::new(1.0, 2.0, 0.0)
-    }
-
     /// Deterministic per-channel pattern (scanner demo).
     pub fn for_channel(hz: u64, seed: u64) -> Self {
         let mut rng = Rng::new(hz ^ seed.rotate_left(17) ^ 0xDECC);
@@ -380,6 +376,7 @@ pub struct BandProfile {
 }
 
 /// Build the band content for a sim profile. `off` = channel − center.
+#[allow(clippy::too_many_arguments)]
 pub fn build_profile(
     profile: &str,
     fs: f64,
@@ -489,10 +486,8 @@ pub fn build_profile(
                             _ => format!("T#{:03},123,045,678,010,090,00000000", n % 1000),
                         };
                         let f = super::ax25::frame_bytes(&cs, "APDECK", &["WIDE1-1"], &info);
+                        // NRZI levels drive the tones
                         super::ax25::nrzi(&super::ax25::hdlc_bits(&f, 24, 3))
-                            .into_iter()
-                            .map(|mark| mark) // NRZI levels drive the tones
-                            .collect()
                     }),
                 ),
                 tone_ph: 0.0,

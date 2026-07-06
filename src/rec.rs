@@ -44,6 +44,7 @@ impl WavWriter {
         Ok(())
     }
 
+    #[allow(dead_code)] // used by tests; the UI derives elapsed from rec_since
     pub fn seconds(&self, rate: u32) -> f32 {
         self.data_bytes as f32 / (rate as f32 * 2.0)
     }

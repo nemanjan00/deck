@@ -36,6 +36,8 @@ pub struct WaterfallBuf {
     pub rows: VecDeque<Vec<u8>>,
     pub width: usize,
     pub cap: usize,
+    /// bumped on every push — cheap change detection for texture uploads
+    pub rev: u64,
 }
 
 impl WaterfallBuf {
@@ -44,11 +46,13 @@ impl WaterfallBuf {
             rows: VecDeque::new(),
             width: 0,
             cap,
+            rev: 0,
         }
     }
 
     pub fn push(&mut self, spec: &[f32], min_db: f32, max_db: f32) {
         self.width = spec.len();
+        self.rev += 1;
         let row: Vec<u8> = spec
             .iter()
             .map(|v| {
@@ -60,10 +64,6 @@ impl WaterfallBuf {
         while self.rows.len() > self.cap {
             self.rows.pop_back();
         }
-    }
-
-    pub fn clear(&mut self) {
-        self.rows.clear();
     }
 }
 
@@ -157,7 +157,6 @@ pub enum Backend {
 pub struct Running {
     pub run: u64,
     pub mode: ModeId,
-    pub device: usize,
     pub backend: Backend,
     pub knobs: Arc<Knobs>,
     pub started: Instant,
@@ -389,7 +388,6 @@ impl Session {
                 self.running = Some(Running {
                     run,
                     mode,
-                    device: self.active_dev,
                     backend: Backend::Extern {
                         child: sp,
                         sbs_stop,
@@ -457,7 +455,6 @@ impl Session {
                 self.running = Some(Running {
                     run,
                     mode,
-                    device: self.active_dev,
                     backend: Backend::Iq(engine),
                     knobs,
                     started: Instant::now(),

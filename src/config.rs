@@ -299,6 +299,7 @@ mod tests {
                 gain: 20.0,
                 squelch: 0.05,
                 nr: 2,
+                ..Default::default()
             },
         );
         let s = toml::to_string_pretty(&st).unwrap();

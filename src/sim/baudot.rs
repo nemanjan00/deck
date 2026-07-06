@@ -8,13 +8,14 @@ pub const SHIFT_FIGS: u8 = 0x1B;
 
 fn lookup(c: char) -> Option<(u8, bool)> {
     let c = c.to_ascii_uppercase();
+    // \x0E/\x0F are placeholders at the shift-code positions — never emit them
     if let Some(i) = LTRS.find(c) {
-        if i != 0x0E && i != 0x0F {
+        if i != SHIFT_FIGS as usize && i != SHIFT_LTRS as usize {
             return Some((i as u8, false));
         }
     }
     if let Some(i) = FIGS.find(c) {
-        if i != 0x0E && i != 0x0F {
+        if i != SHIFT_FIGS as usize && i != SHIFT_LTRS as usize {
             return Some((i as u8, true));
         }
     }
@@ -25,13 +26,12 @@ fn lookup(c: char) -> Option<(u8, bool)> {
 /// re-asserts the shift state at the start.
 pub fn encode(text: &str) -> Vec<bool> {
     let mut bits: Vec<bool> = Vec::new();
-    let mut push_code = |bits: &mut Vec<bool>, code: u8| {
+    let push_code = |bits: &mut Vec<bool>, code: u8| {
         bits.push(false); // start (space)
         for i in 0..5 {
             bits.push(code >> i & 1 == 1);
         }
-        bits.push(true); // stop (mark)
-        bits.push(true);
+        bits.extend_from_slice(&[true, true]); // stop bits (mark)
     };
     for _ in 0..8 {
         bits.push(true); // idle mark

@@ -48,23 +48,23 @@ impl CallFields {
 }
 
 /// Value following any of `keys` in `line`: `TG: 91`, `TG=91`, `TG 91`.
+/// Both sides of the key must be token boundaries ("DST" must not match
+/// inside "DSTAR").
 fn field_after<'a>(line: &'a str, keys: &[&str]) -> Option<&'a str> {
     for key in keys {
         let mut start = 0;
         while let Some(i) = line[start..].find(key) {
             let at = start + i;
-            // token boundary before the key
             let ok_before = at == 0
                 || !line[..at]
                     .chars()
                     .next_back()
                     .is_some_and(|c| c.is_ascii_alphanumeric());
-            let after = &line[at + key.len()..];
-            let after = after.trim_start_matches([':', '=']).trim_start();
-            if ok_before && !after.is_empty() {
-                let end = after
-                    .find(|c: char| c == '|' || c == ',' || c == ';')
-                    .unwrap_or(after.len());
+            let after_raw = &line[at + key.len()..];
+            let ok_after = after_raw.starts_with([':', '=', ' ']);
+            let after = after_raw.trim_start_matches([':', '=']).trim_start();
+            if ok_before && ok_after && !after.is_empty() {
+                let end = after.find(['|', ',', ';']).unwrap_or(after.len());
                 let val = after[..end].split_whitespace().next().unwrap_or("");
                 if !val.is_empty() && val != ":" && val != "=" {
                     return Some(val);

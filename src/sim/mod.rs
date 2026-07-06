@@ -499,24 +499,33 @@ mod tests {
             }
         }
         let start = sync_at.expect("sync found");
+        // word k of the whole transmission; each batch of 16 words is
+        // preceded by its own sync word
         let word_at = |k: usize| -> u32 {
-            bits[start + k * 32..start + k * 32 + 32]
+            let batch = k / 16;
+            let off = start + k * 32 + batch * 32;
+            bits[off..off + 32]
                 .iter()
                 .fold(0, |acc, b| acc << 1 | u32::from(*b))
         };
+        // the second batch must start with sync
+        let sync2 = bits[start + 512..start + 512 + 32]
+            .iter()
+            .fold(0u32, |acc, b| acc << 1 | u32::from(*b));
+        assert_eq!(sync2, pocsag::SYNC, "batch 2 sync");
         let mut addr = None;
         let mut text_bits: Vec<bool> = Vec::new();
-        for k in 0..16 {
+        for k in 0..32 {
             let cw = word_at(k);
             assert_eq!(pocsag::syndrome(cw), 0, "codeword {k} corrupt");
             if cw == pocsag::IDLE {
                 continue;
             }
             if cw >> 31 == 0 {
-                addr = Some(((cw >> 13) & 0x3_FFFF) << 3 | (k as u32 / 2));
+                addr = Some(((cw >> 13) & 0x3_FFFF) << 3 | (k as u32 % 16) / 2);
             } else {
                 for i in (11..31).rev() {
-                    text_bits.push(cw >> i & 1 == 1);
+                    text_bits.push((cw >> i) & 1 == 1);
                 }
             }
         }

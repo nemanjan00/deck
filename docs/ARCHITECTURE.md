@@ -14,17 +14,27 @@ fans audio out to the speaker and/or external decoders' stdin (`multimon-ng`,
 (`dump1090` owns the device; deck consumes its SBS TCP feed — which also
 makes readsb/rtl1090 drop-in compatible).
 
-```
-                       ┌────────────────────────── deck ──────────────────────────┐
- rtl_sdr / airspyhf_rx │  IQ → NB → NCO tune → decimate → chan LP → demod          │
- / deck simgen ───────►│        │                                │                │
-   (one source proc,   │        └── band FFT (waterfall/scope)   ├─ raw audio ────┼─► decoder stdin
-    owns the SDR)      │                                         │  (resampled)   │   multimon-ng / dsd-neo /
-                       │              monitor path: HP/LP → auto-notch → NR       │   sox|minimodem
-                       │                  → squelch → sink (paplay/pw-cat/aplay)  │        │
-                       │                  → WAV recorder (squelch-aware)          │   stdout lines
-                       │              audio FFT (spectrum view)                   │        ▼
-                       └──────────────────────────────────────────────────────────┘   parsers → stores → GUI
+```mermaid
+flowchart LR
+    subgraph src["IQ source (one process, owns the SDR)"]
+        SDR["rtl_sdr / airspyhf_rx / deck simgen"]
+    end
+    subgraph deck["deck RX engine (in-process DSP)"]
+        NB["noise blanker"] --> NCO["NCO tune"] --> DEC["decimate"] --> CH["channel LP"] --> DEM["demod NFM/WFM/AM/SAM/USB/LSB"]
+        SDR --> NB
+        SDR -.-> BFFT["band FFT → waterfall / scope"]
+        DEM --> RAW["raw demod audio"]
+        RAW --> RS["resample"] --> DSTDIN["decoder stdin"]
+        RAW --> FILT["HP/LP filters"] --> NOTCH["auto-notch"] --> NR["spectral NR"] --> SQL["squelch"] --> SINK["audio sink (paplay/pw-cat/aplay)"]
+        SQL --> REC["WAV recorder (squelch-aware)"]
+        FILT -.-> AFFT["audio FFT → spectrum"]
+    end
+    subgraph decoders["external decoders"]
+        DSTDIN --> MM["multimon-ng / dsd-neo / sox+minimodem"]
+        MM --> LINES["stdout lines"]
+    end
+    LINES --> P["parsers → stores → GUI"]
+    D1090["dump1090 (ADS-B only, owns device)"] -->|"SBS TCP :30003"| P
 ```
 
 ## Module map (src/)

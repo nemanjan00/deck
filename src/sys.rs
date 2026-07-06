@@ -210,14 +210,6 @@ pub enum PowerAction {
 }
 
 impl PowerAction {
-    pub fn label(self) -> &'static str {
-        match self {
-            PowerAction::PowerOff => "Power off",
-            PowerAction::Reboot => "Reboot",
-            PowerAction::Suspend => "Suspend",
-        }
-    }
-
     /// Executed via systemd-logind (works unprivileged on handheld images).
     pub fn execute(self) -> Result<(), String> {
         let verb = match self {
