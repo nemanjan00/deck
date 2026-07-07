@@ -315,8 +315,9 @@ impl DeckApp {
                     sw.idx += 1;
                     if sw.idx >= sw.centers.len() {
                         // done: publish the full catch into the peak browser
-                        sw.results
-                            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                        sw.results.sort_by(|a, b| {
+                            b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal)
+                        });
                         self.session.stores.peaks = sw
                             .results
                             .iter()
@@ -335,8 +336,8 @@ impl DeckApp {
                         if let Err(e) = self.session.retune(hz) {
                             self.session.set_status(e);
                         }
-                        sw.next_at = now
-                            + Duration::from_millis(self.session.cfg.sweep.dwell_ms.max(400));
+                        sw.next_at =
+                            now + Duration::from_millis(self.session.cfg.sweep.dwell_ms.max(400));
                         self.sweep = Some(sw);
                     }
                 } else {

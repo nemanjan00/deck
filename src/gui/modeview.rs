@@ -285,10 +285,7 @@ fn ctl_value(app: &DeckApp, mode: ModeId, c: Ctl) -> String {
             }
         }
         Ctl::Sweep => match &app.sweep {
-            Some(sw) => format!(
-                "{}%",
-                (sw.idx * 100) / sw.centers.len().max(1)
-            ),
+            Some(sw) => format!("{}%", (sw.idx * 100) / sw.centers.len().max(1)),
             None => {
                 let c = &app.session.cfg.sweep;
                 format!(
@@ -466,13 +463,10 @@ fn activate(app: &mut DeckApp, mode: ModeId, c: Ctl) {
                     centers,
                     idx: 0,
                     next_at: Instant::now()
-                        + std::time::Duration::from_millis(
-                            app.session.cfg.sweep.dwell_ms.max(400),
-                        ),
+                        + std::time::Duration::from_millis(app.session.cfg.sweep.dwell_ms.max(400)),
                     results: Vec::new(),
                 });
-                app.session
-                    .set_status(format!("sweeping {n} segments…"));
+                app.session.set_status(format!("sweeping {n} segments…"));
             }
         }
         Ctl::MemSave => {

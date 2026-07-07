@@ -9,6 +9,7 @@ use std::path::Path;
 pub enum SdrKind {
     RtlSdr,
     AirspyHf,
+    HackRf,
     Sim,
 }
 
@@ -18,6 +19,7 @@ impl SdrKind {
         match self {
             SdrKind::RtlSdr => "rtlsdr",
             SdrKind::AirspyHf => "airspyhf",
+            SdrKind::HackRf => "hackrf",
             SdrKind::Sim => "sim",
         }
     }
@@ -26,6 +28,7 @@ impl SdrKind {
         match self {
             SdrKind::RtlSdr => "RTL-SDR",
             SdrKind::AirspyHf => "Airspy HF+",
+            SdrKind::HackRf => "HackRF",
             SdrKind::Sim => "Simulator",
         }
     }
@@ -35,6 +38,7 @@ impl SdrKind {
         match self {
             SdrKind::RtlSdr => &[24_000_000..=1_766_000_000],
             SdrKind::AirspyHf => &[9_000..=31_000_000, 60_000_000..=260_000_000],
+            SdrKind::HackRf => &[1_000_000..=6_000_000_000],
             SdrKind::Sim => &[0..=9_999_999_999],
         }
     }
@@ -45,6 +49,7 @@ const USB_IDS: &[(u16, u16, SdrKind)] = &[
     (0x0bda, 0x2832, SdrKind::RtlSdr),
     (0x0bda, 0x2838, SdrKind::RtlSdr),
     (0x03eb, 0x800c, SdrKind::AirspyHf), // Airspy HF+ / HF+ Discovery
+    (0x1d50, 0x6089, SdrKind::HackRf),   // Great Scott Gadgets HackRF One
 ];
 
 #[derive(Clone, Debug)]

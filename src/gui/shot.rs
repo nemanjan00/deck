@@ -84,6 +84,8 @@ fn fake_running(app: &mut DeckApp, mode: ModeId, freq: u64) {
                 sbs_stop: None,
             },
             knobs: crate::audio::Knobs::new(freq as i64 - center as i64),
+            freq_atomic: std::sync::Arc::new(std::sync::atomic::AtomicU64::new(freq)),
+            rig_stop: None,
             started: Instant::now() - Duration::from_secs(154),
             center_hz: center,
             rate: 2_400_000,

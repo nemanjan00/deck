@@ -362,7 +362,7 @@ fn pump(
     let mut iq_rec: Option<std::fs::File> = None;
 
     let bytes_per = match cfg.format {
-        IqFormat::Cu8 => 2usize,
+        IqFormat::Cu8 | IqFormat::Cs8 => 2usize,
         IqFormat::Cs16 => 4usize,
     };
     let mut raw = vec![0u8; 16384 * bytes_per];
@@ -390,6 +390,12 @@ fn pump(
                     Complex32::new((b[0] as f32 - 127.5) / 127.5, (b[1] as f32 - 127.5) / 127.5)
                 })
                 .collect(),
+            IqFormat::Cs8 => bytes[..usable]
+                .chunks_exact(2)
+                .map(|b| {
+                    Complex32::new(f32::from(b[0] as i8) / 128.0, f32::from(b[1] as i8) / 128.0)
+                })
+                .collect(),
             IqFormat::Cs16 => bytes[..usable]
                 .chunks_exact(4)
                 .map(|b| {
@@ -411,6 +417,7 @@ fn pump(
                 (Some(base), false) => {
                     let ext = match cfg.format {
                         IqFormat::Cu8 => "cu8",
+                        IqFormat::Cs8 => "cs8",
                         IqFormat::Cs16 => "cs16",
                     };
                     let path = base.with_extension(ext);

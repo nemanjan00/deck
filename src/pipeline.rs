@@ -23,6 +23,7 @@ use std::time::Duration;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum IqFormat {
     Cu8,
+    Cs8,
     Cs16,
 }
 
@@ -38,6 +39,12 @@ pub fn iq_source(dev: SdrKind) -> (&'static str, IqFormat, u32) {
             "airspyhf_rx -f {center_mhz} -a 768000 -r /dev/stdout",
             IqFormat::Cs16,
             768_000,
+        ),
+        SdrKind::HackRf => (
+            // untested-by-the-author defaults; override [pipelines.hackrf]
+            "hackrf_transfer -r - -f {center_hz} -s 2400000 -a 1 -l 32 -g {gain_int}",
+            IqFormat::Cs8,
+            2_400_000,
         ),
         SdrKind::Sim => (
             "'{deck}' simgen --mode iq-band --profile {profile} --center {center_hz} \
@@ -59,6 +66,8 @@ fn extern_template(dev: SdrKind, mode: ModeId) -> Option<String> {
         (SdrKind::AirspyHf, ModeId::Adsb) => None, // 1090 MHz out of range
         (SdrKind::RtlSdr, ModeId::Ais) => Some("rtl_ais -d {device} -n -g {gain} -p {ppm}".into()),
         (SdrKind::AirspyHf, ModeId::Ais) => None, // rtl_ais is RTL-only
+        (SdrKind::HackRf, ModeId::Adsb) => None,  // use dump1090 --device? override in config
+        (SdrKind::HackRf, ModeId::Ais) => None,
         (SdrKind::Sim, m) => Some(format!(
             "'{{deck}}' simgen --mode {} --lines",
             mode_def(m).key
@@ -157,6 +166,7 @@ pub struct ToolReport {
 pub const KNOWN_TOOLS: &[&str] = &[
     "rtl_sdr",
     "rtl_test",
+    "hackrf_transfer",
     "airspyhf_rx",
     "dsd-neo",
     "multimon-ng",
@@ -458,6 +468,11 @@ pub enum AppEvent {
         run: u64,
         path: Option<String>,
     },
+    /// a rigctl client (dsd-neo trunking) asked us to retune
+    RigTune {
+        run: u64,
+        hz: u64,
+    },
 }
 
 pub fn strip_ansi(s: &str) -> String {
@@ -527,6 +542,89 @@ pub fn read_stream(
             }
         }
     }
+}
+
+/// Minimal rigctl (hamlib NET) server: lets decoders drive retunes —
+/// dsd-neo's trunk following connects here with `-U <port>` and issues
+/// `F <hz>`. In-band hops are instant (NCO swap), which is exactly what
+/// trunking wants.
+pub fn spawn_rigctl_server(
+    port: u16,
+    run: u64,
+    freq: Arc<std::sync::atomic::AtomicU64>,
+    tx: Sender<AppEvent>,
+    stop: Arc<AtomicBool>,
+) {
+    std::thread::spawn(move || {
+        use std::io::Write;
+        let Ok(listener) = std::net::TcpListener::bind(("127.0.0.1", port)) else {
+            return;
+        };
+        let _ = listener.set_nonblocking(true);
+        loop {
+            if stop.load(Ordering::Relaxed) {
+                return;
+            }
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    let _ = stream.set_nonblocking(false);
+                    let _ = stream.set_read_timeout(Some(Duration::from_millis(400)));
+                    let mut rd = BufReader::new(stream.try_clone().expect("clone"));
+                    let mut wr = stream;
+                    let mut line = String::new();
+                    loop {
+                        if stop.load(Ordering::Relaxed) {
+                            return;
+                        }
+                        line.clear();
+                        match rd.read_line(&mut line) {
+                            Ok(0) => break,
+                            Ok(_) => {
+                                let cmd = line.trim();
+                                let reply: String = if let Some(rest) = cmd
+                                    .strip_prefix('F')
+                                    .or_else(|| cmd.strip_prefix("\\set_freq"))
+                                {
+                                    if let Ok(hz) = rest.trim().parse::<f64>() {
+                                        let _ = tx.send(AppEvent::RigTune {
+                                            run,
+                                            hz: hz.max(0.0) as u64,
+                                        });
+                                    }
+                                    "RPRT 0\n".into()
+                                } else if cmd.starts_with('f') || cmd.starts_with("\\get_freq") {
+                                    format!("{}\n", freq.load(Ordering::Relaxed))
+                                } else if cmd.starts_with('m') {
+                                    "FM\n12500\n".into()
+                                } else if cmd.starts_with('v') {
+                                    "VFOA\n".into()
+                                } else if cmd.starts_with('q') {
+                                    let _ = wr.write_all(b"RPRT 0\n");
+                                    break;
+                                } else {
+                                    "RPRT 0\n".into()
+                                };
+                                if wr.write_all(reply.as_bytes()).is_err() {
+                                    break;
+                                }
+                            }
+                            Err(e)
+                                if e.kind() == std::io::ErrorKind::WouldBlock
+                                    || e.kind() == std::io::ErrorKind::TimedOut =>
+                            {
+                                continue;
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(200));
+                }
+                Err(_) => return,
+            }
+        }
+    });
 }
 
 /// Background SBS (BaseStation, port 30003) TCP client with retry.

@@ -11,7 +11,7 @@ use crate::parse::multimon::{AprsMsg, AprsParser, PagerMsg};
 use crate::parse::sbs::AircraftStore;
 use crate::pipeline::{self, in_band, resolve, AppEvent, LineSrc, Plan, Spawned, ToolReport};
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::mpsc::{Receiver, Sender};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -233,6 +233,9 @@ pub struct Running {
     pub mode: ModeId,
     pub backend: Backend,
     pub knobs: Arc<Knobs>,
+    /// current tuned freq mirrored for the rigctl server
+    pub freq_atomic: Arc<AtomicU64>,
+    pub rig_stop: Option<Arc<AtomicBool>>,
     pub started: Instant,
     pub center_hz: u64,
     pub rate: u32,
@@ -472,6 +475,8 @@ impl Session {
                         sbs_stop,
                     },
                     knobs: Knobs::new(0),
+                    freq_atomic: Arc::new(AtomicU64::new(freq)),
+                    rig_stop: None,
                     started: Instant::now(),
                     center_hz: freq,
                     rate: 0,
@@ -533,11 +538,26 @@ impl Session {
                     self.tx.clone(),
                 )
                 .map_err(|e| format!("engine start failed: {e}"))?;
+                let freq_atomic = Arc::new(AtomicU64::new(freq));
+                let rig_stop = (self.cfg.rigctl_port > 0 && mode_def(mode).view == ViewKind::Voice)
+                    .then(|| {
+                        let stop = Arc::new(AtomicBool::new(false));
+                        pipeline::spawn_rigctl_server(
+                            self.cfg.rigctl_port,
+                            run,
+                            freq_atomic.clone(),
+                            self.tx.clone(),
+                            stop.clone(),
+                        );
+                        stop
+                    });
                 self.running = Some(Running {
                     run,
                     mode,
                     backend: Backend::Iq(engine),
                     knobs,
+                    freq_atomic,
+                    rig_stop,
                     started: Instant::now(),
                     center_hz,
                     rate,
@@ -556,6 +576,9 @@ impl Session {
 
     pub fn stop(&mut self) {
         if let Some(r) = self.running.take() {
+            if let Some(s) = &r.rig_stop {
+                s.store(true, Ordering::Relaxed);
+            }
             match r.backend {
                 Backend::Iq(engine) => engine.stop(),
                 Backend::Extern { child, sbs_stop } => {
@@ -589,6 +612,7 @@ impl Session {
                     ));
                 }
                 r.freq_hz = freq;
+                r.freq_atomic.store(freq, Ordering::Relaxed);
                 if in_band(r.center_hz, r.rate, freq) {
                     r.knobs
                         .offset_hz
@@ -696,6 +720,11 @@ impl Session {
                 AppEvent::Rec { run: er, path } if er == run => {
                     self.stores.rec_since = path.as_ref().map(|_| now);
                     self.stores.rec_path = path;
+                }
+                AppEvent::RigTune { run: er, hz } if er == run => {
+                    if let Err(e) = self.retune(hz) {
+                        self.set_status(format!("rigctl: {e}"));
+                    }
                 }
                 _ => {} // stale run
             }

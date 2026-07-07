@@ -18,6 +18,10 @@ pub struct Config {
     pub presets: HashMap<String, Vec<Chan>>,
     /// decoder command overrides per mode key (stdin s16le audio decoders)
     pub decoders: HashMap<String, String>,
+    /// rigctl server port for decoder-driven retunes (dsd-neo -U <port>
+    /// trunk following); 0 disables
+    #[serde(default = "default_rigctl_port")]
+    pub rigctl_port: u16,
     /// pipeline overrides: [pipelines.<device>] iq_source = "...", <mode> = "..."
     pub pipelines: HashMap<String, HashMap<String, String>>,
 }
@@ -203,6 +207,10 @@ pub struct ModePersist {
     pub if_shift: i32,
     /// monitor audio toggle for decoder modes
     pub monitor: bool,
+}
+
+fn default_rigctl_port() -> u16 {
+    4532
 }
 
 pub fn config_path(explicit: Option<&Path>) -> PathBuf {
