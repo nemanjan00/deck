@@ -208,6 +208,7 @@ pub const KNOWN_TOOLS: &[&str] = &[
     "AIS-catcher",
     "sox",
     "minimodem",
+    "jt9",
     "paplay",
     "pw-cat",
     "aplay",
@@ -262,6 +263,10 @@ pub enum Plan {
         /// decoder writes DECODED audio to stdout (dsd-neo -o -): deck reads
         /// stdout as 48k s16le audio, stderr as call-info lines.
         decoder_audio: bool,
+        /// windowed decode (FT8): deck buffers demod audio into 15 s
+        /// UTC-aligned WAVs and runs the decoder (`{wav}` placeholder) once
+        /// per cycle, rather than streaming to its stdin.
+        windowed: bool,
     },
 }
 
@@ -352,16 +357,21 @@ pub fn resolve(
             }
 
             // Sim device degrades gracefully: decoder missing → line feed sim.
-            if dev.kind == SdrKind::Sim && !missing.is_empty() {
+            // Windowed modes (FT8) always use the line feed on Sim — the IQ
+            // generator can't synthesize their waveforms, so the real decoder
+            // would find nothing even when installed.
+            let sim_windowed = dev.kind == SdrKind::Sim && mode == ModeId::Ft8;
+            if dev.kind == SdrKind::Sim && (!missing.is_empty() || sim_windowed) {
                 let t = format!("'{{deck}}' simgen --mode {} --lines", m.key);
-                return Some(extern_plan(
-                    t,
-                    Some(format!(
+                let note = if missing.is_empty() {
+                    "simulating decoder output".to_string()
+                } else {
+                    format!(
                         "simulating decoder output ({} not installed)",
                         missing.join(", ")
-                    )),
-                    tools,
-                ));
+                    )
+                };
+                return Some(extern_plan(t, Some(note), tools));
             }
 
             let center = center_for(dev, freq_hz, rate);
@@ -380,6 +390,7 @@ pub fn resolve(
                     decoder_char_mode: mode == ModeId::Rtty,
                     audio_out: m.audio_out,
                     decoder_audio: mode_def(mode).view == crate::modes::ViewKind::Voice,
+                    windowed: mode == ModeId::Ft8,
                 },
                 missing,
                 note,

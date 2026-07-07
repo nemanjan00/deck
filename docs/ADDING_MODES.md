@@ -33,6 +33,15 @@ involved, the command that reads s16le mono audio on stdin. That's the whole
 contract. `PipeKind::Extern` is the escape hatch for tools that must own the
 device themselves (see ADS-B).
 
+**Windowed decoders** (decode a whole cycle at once, not a stream — e.g. FT8)
+are a third shape: the mode is still `PipeKind::Iq`, but the plan sets
+`windowed: true` (currently derived from `mode == ModeId::Ft8` in
+`pipeline::resolve`). Instead of streaming stdin, deck buffers the demod audio
+and, on a time boundary, writes a WAV and runs the decoder with `{wav}`
+substituted (`decoder_rate` is the WAV rate). See `audio::ft8_window_thread`;
+the decode is a one-shot `sh -c` whose stdout/stderr lines are fed back through
+the normal `AppEvent::Line` → `apply_line` path.
+
 **Icon:** add an arm in `src/gui/icons.rs::draw` for your `key` (a few painted
 strokes); until you do, a placeholder circle renders.
 

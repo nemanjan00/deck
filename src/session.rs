@@ -151,6 +151,7 @@ pub struct Stores {
     pub raw: VecDeque<(LineSrc, String)>,
     pub pagers: VecDeque<Timed<PagerMsg>>,
     pub aprs: VecDeque<Timed<AprsMsg>>,
+    pub ft8: VecDeque<Timed<crate::parse::ft8::Spot>>,
     aprs_parser: AprsParser,
     ais_parser: crate::parse::ais::AisParser,
     pub textfeed: String,
@@ -181,6 +182,7 @@ impl Stores {
             raw: VecDeque::new(),
             pagers: VecDeque::new(),
             aprs: VecDeque::new(),
+            ft8: VecDeque::new(),
             aprs_parser: AprsParser::new(),
             ais_parser: crate::parse::ais::AisParser::new(),
             textfeed: String::new(),
@@ -503,6 +505,7 @@ impl Session {
                 decoder_char_mode,
                 audio_out,
                 decoder_audio,
+                windowed,
             } => {
                 let knobs = Knobs::new(freq as i64 - center_hz as i64);
                 knobs.nr.store(f32_bits(nr_level(mp.nr)), Ordering::Relaxed);
@@ -549,6 +552,7 @@ impl Session {
                         decoder_char_mode,
                         sink_cmd,
                         decoder_audio,
+                        windowed,
                     },
                     knobs.clone(),
                     self.tx.clone(),
@@ -785,6 +789,19 @@ impl Session {
                     if let Some(m) = self.stores.ais_parser.push(&text) {
                         self.stores.decoded += 1;
                         self.stores.aircraft.push_ais(&m, Instant::now());
+                    }
+                }
+            }
+            // FT8 spots arrive per 15 s cycle from the window decoder (jt9 /
+            // ft8_lib). parse_spot is strict, so scanning both streams is safe.
+            ViewKind::Ft8 => {
+                if src != LineSrc::Sbs {
+                    if let Some(spot) = crate::parse::ft8::parse_spot(&text) {
+                        self.stores.decoded += 1;
+                        self.stores.ft8.push_front(Timed::now(spot));
+                        while self.stores.ft8.len() > 400 {
+                            self.stores.ft8.pop_back();
+                        }
                     }
                 }
             }

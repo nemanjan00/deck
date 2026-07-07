@@ -4,7 +4,7 @@
 
 **A handheld ham-radio RX machine for SDR cyberdecks.**
 
-Fullscreen touch GUI · RTL-SDR & Airspy HF+ · NFM / WFM / AM / SSB / DMR / YSF / D-STAR / NXDN / P25 / M17 / POCSAG / APRS / RTTY / ADS-B · scanner · waterfall · noise reduction · recording · works entirely offline
+Fullscreen touch GUI · RTL-SDR & Airspy HF+ · NFM / WFM / AM / SSB / DMR / YSF / D-STAR / NXDN / P25 / M17 / POCSAG / APRS / RTTY / FT8 / ADS-B / AIS · scanner · waterfall · noise reduction · recording · works entirely offline
 
 [![CI](https://github.com/nemanjan00/deck/actions/workflows/ci.yml/badge.svg)](https://github.com/nemanjan00/deck/actions/workflows/ci.yml)
 ![arch](https://img.shields.io/badge/linux-x86__64%20%7C%20aarch64-blue)
@@ -57,6 +57,10 @@ drag the waterfall to retune, 44 px+ targets throughout.
 |---|---|
 | ![adsb table](docs/shots/adsb.png) | ![ais](docs/shots/ais.png) |
 
+| FT8 spot table (15 s windowed decode) | |
+|---|---|
+| ![ft8](docs/shots/ft8.png) | |
+
 </details>
 
 *Every screenshot above was rendered by `deck shot` — deck's built-in CPU
@@ -96,8 +100,9 @@ released first, so nothing ever fights over the radio.
 | **Digital voice** | DMR · YSF · D-STAR · NXDN · P25 · M17 | `dsd-neo` | live call card: TG, SRC, slot, color code, NAC/RAN |
 | **Data** | POCSAG · APRS | `multimon-ng` | typed message tables with detail popups |
 | | RTTY | `sox` + `minimodem` | 45.45 Bd Baudot text feed |
+| | FT8 | `jt9` (WSJT-X) / `ft8_lib` | 15 s UTC-windowed WAV decode; spot table (UTC · SNR · DT · freq · msg), CQ highlighted |
 | | ADS-B | `dump1090` / `readsb` / `rtl1090` | offline radar map + aircraft table via SBS :30003 |
-| | AIS | `rtl_ais` | ships on the same radar/table (161.975/162.025 MHz) |
+| | AIS | `AIS-catcher` / `rtl_ais` | ships on the same radar/table (161.975/162.025 MHz) |
 | **Tools** | Scanner | — | dwell/hold/lockout, priority channel, hit counters |
 | | Waterfall | — | full-band scope, drag-to-tune, click-to-jump |
 
@@ -105,6 +110,15 @@ released first, so nothing ever fights over the radio.
 and HackRF One (1 MHz–6 GHz, cs8) are autodetected over sysfs — no udev fights, no libusb linkage. A
 **Simulator** device is always present (see below). Range checks are
 per-device: deck won't let you ask an HF+ for 1090 MHz.
+
+**FT8 is windowed, not streamed** (author-untested on-air): instead of feeding
+a decoder over stdin, deck buffers the USB audio and, once per 15 s UTC slot,
+writes a 12 kHz WAV and runs a one-shot decoder (`{wav}` is substituted). It
+needs an **accurate system clock** (NTP) and either `jt9` (from the
+distro `wsjtx` package) or `ft8_lib`'s `decode_ft8` on `PATH` — override the
+command in `[decoders] ft8 = "…"`. These aren't bundled in the AppImage (Qt
+weight); on Sim the spot table is fed by the generator so you can try the UI
+offline.
 
 ## The DSP toolkit
 

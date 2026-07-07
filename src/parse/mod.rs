@@ -3,5 +3,6 @@
 
 pub mod ais;
 pub mod dsd;
+pub mod ft8;
 pub mod multimon;
 pub mod sbs;

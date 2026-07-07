@@ -320,6 +320,21 @@ pub fn draw(painter: &Painter, rect: Rect, key: &str, color: Color32, dim: Color
             line(painter, r, &[(0.08, 0.72), (0.2, 0.72)], sd);
             line(painter, r, &[(0.8, 0.72), (0.92, 0.72)], sd);
         }
+        "ft8" => {
+            // 8-FSK tone spectrum: bars of varying height on a baseline
+            let bar = Stroke::new(w * 1.7, color);
+            let base = 0.82;
+            for (x, top) in [
+                (0.18, 0.5),
+                (0.34, 0.26),
+                (0.5, 0.58),
+                (0.66, 0.16),
+                (0.82, 0.42),
+            ] {
+                line(painter, r, &[(x, base), (x, top)], bar);
+            }
+            line(painter, r, &[(0.1, base), (0.9, base)], sd);
+        }
         "power" => {
             arc(painter, p(r, 0.5, 0.55), rect.width() * 0.3, -0.6, 3.74, s);
             line(painter, r, &[(0.5, 0.12), (0.5, 0.5)], s);

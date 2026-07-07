@@ -477,6 +477,38 @@ fn run_lines(args: &SimArgs) -> Result<()> {
             }
             sleep_ms(1800, args.fast);
         },
+        // FT8: a burst of spots once per 15 s cycle, in the jt9/ft8_lib
+        // shape our parser accepts (`HHMMSS SNR DT FREQ ~ MSG`).
+        "ft8" => {
+            let msgs = [
+                "CQ DL1ABC JO31",
+                "CQ DX EA7XYZ IM76",
+                "YT7OP DL1ABC -05",
+                "DL1ABC YT7OP R-08",
+                "CQ W1AW FN31",
+                "K1JT G4XYZ 73",
+                "CQ S52DK JN76",
+                "9A5W OK1TEST -12",
+            ];
+            loop {
+                n += 1;
+                let count = rng.range_u32(3, 7);
+                for _ in 0..count {
+                    let m = msgs[(rng.next_u64() as usize) % msgs.len()];
+                    let snr = rng.range_u32(0, 34) as i32 - 24; // -24..=9 dB
+                    let dt = rng.range_f64(-1.0, 1.0);
+                    let freq = rng.range_u32(300, 2700);
+                    if !out_ok(writeln!(out, "000000 {snr:>3} {dt:>+4.1} {freq:>4} ~ {m}"))? {
+                        return Ok(());
+                    }
+                }
+                out.flush().ok();
+                if args.count > 0 && n >= args.count {
+                    return Ok(());
+                }
+                sleep_ms(15_000, args.fast); // one FT8 cycle
+            }
+        }
         other => {
             if !out_ok(writeln!(
                 out,

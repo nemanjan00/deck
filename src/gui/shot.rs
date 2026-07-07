@@ -294,6 +294,35 @@ fn demo_app(scene: &str, dark: bool) -> DeckApp {
             }
             app.session.stores.audio_rms = 0.11;
         }
+        "ft8" => {
+            let ui = app.mode_ui(ModeId::Ft8);
+            ui.freq.hz = 14_074_000;
+            fake_running(&mut app, ModeId::Ft8, 14_074_000);
+            fill_audio(&mut app, 23);
+            // newest first (matches the live push_front order)
+            for (i, (msg, snr, dt, freq)) in [
+                ("CQ DL1ABC JO31", -8, 0.2, 1500u32),
+                ("YT7OP DL1ABC -05", 2, 0.1, 1502),
+                ("CQ DX EA7XYZ IM76", -14, -0.3, 890),
+                ("K1JT G4ABC R-09", -3, 0.4, 730),
+                ("CQ W1AW FN31", -17, 0.0, 2100),
+                ("9A5W S52DK 73", -11, -0.2, 1180),
+            ]
+            .iter()
+            .enumerate()
+            {
+                app.session.stores.ft8.push_back(Timed {
+                    at: chrono::Local::now() - chrono::Duration::seconds(15 * i as i64),
+                    msg: crate::parse::ft8::Spot {
+                        snr: *snr,
+                        dt: *dt,
+                        freq: *freq,
+                        msg: (*msg).into(),
+                    },
+                });
+            }
+            app.session.stores.decoded = 6;
+        }
         _ => {}
     }
 
@@ -312,6 +341,7 @@ fn demo_app(scene: &str, dark: bool) -> DeckApp {
         "pocsag" => Screen::Mode(ModeId::Pocsag),
         "aprs" => Screen::Mode(ModeId::Aprs),
         "scanner" => Screen::Mode(ModeId::Scanner),
+        "ft8" => Screen::Mode(ModeId::Ft8),
         _ => Screen::Menu,
     };
     if !dark {
@@ -341,6 +371,7 @@ pub fn default_shots() -> Vec<ShotSpec> {
         "adsb-radar",
         "ais",
         "scanner",
+        "ft8",
     ] {
         v.push(ShotSpec {
             name: scene,

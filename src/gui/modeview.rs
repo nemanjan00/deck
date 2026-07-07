@@ -148,6 +148,7 @@ fn has_list(view: ViewKind) -> bool {
             | ViewKind::Ais
             | ViewKind::Scanner
             | ViewKind::Voice
+            | ViewKind::Ft8
             | ViewKind::Waterfall
     )
 }
@@ -733,6 +734,7 @@ fn list_keys(
         ViewKind::Adsb | ViewKind::Ais => app.session.stores.aircraft.len(),
         ViewKind::Scanner => app.session.scan.channels.len(),
         ViewKind::Voice => app.session.stores.call_history.len(),
+        ViewKind::Ft8 => app.session.stores.ft8.len(),
         ViewKind::Waterfall => app.session.stores.peaks.len(),
         _ => 0,
     };
@@ -777,6 +779,24 @@ fn list_keys(
                         m.msg.to,
                         m.msg.path,
                         m.msg.info
+                    ));
+                }
+            }
+        }
+        ViewKind::Ft8 => {
+            if enter {
+                if let Some(s) = app.session.stores.ft8.get(sel) {
+                    let station = crate::parse::ft8::callers(&s.msg.msg)
+                        .map(|c| format!("\n\nstation: {c}"))
+                        .unwrap_or_default();
+                    app.detail = Some(format!(
+                        "{}  {:+} dB  DT {:+.1}s  {} Hz\n\n{}{}",
+                        s.at.format("%H:%M:%S"),
+                        s.msg.snr,
+                        s.msg.dt,
+                        s.msg.freq,
+                        s.msg.msg,
+                        station,
                     ));
                 }
             }
@@ -989,6 +1009,7 @@ fn draw_left(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, com
             ViewKind::Adsb | ViewKind::Ais => app.session.stores.aircraft.len(),
             ViewKind::Scanner => app.session.scan.channels.len(),
             ViewKind::Voice => app.session.stores.call_history.len(),
+            ViewKind::Ft8 => app.session.stores.ft8.len(),
             ViewKind::Waterfall => app.session.stores.peaks.len(),
             _ => 0,
         };
@@ -1036,6 +1057,7 @@ fn draw_right(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
         ViewKind::Adsb | ViewKind::Ais => draw_adsb(app, ui, mode, th),
         ViewKind::TextFeed => draw_textfeed(app, ui, th),
         ViewKind::Scanner => draw_scanner(app, ui, mode, th),
+        ViewKind::Ft8 => draw_ft8(app, ui, mode, th),
         ViewKind::Waterfall => draw_peaks(app, ui, mode, th),
     }
 }
@@ -1706,6 +1728,105 @@ fn draw_aprs(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
             app,
             mode,
             ViewKind::Aprs,
+            false,
+            true,
+            false,
+            false,
+            false,
+            false,
+        );
+    }
+}
+
+/// FT8 spot table: one row per decode, newest first (UTC · SNR · DT · audio
+/// freq · message). CQ calls are highlighted. A small countdown shows where we
+/// are in the 15 s decode cycle. OK/tap a row for the full message detail.
+fn draw_ft8(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
+    let sel = app.mode_ui(mode).list_sel;
+    let in_list = app.mode_ui(mode).list_mode;
+
+    // where we are in the 15 s UTC cycle (decode fires ~3 s after TX ends)
+    let phase = chrono::Utc::now().timestamp().rem_euclid(15);
+    let (cycle_txt, cycle_col) = if phase < 13 {
+        (
+            format!("cycle: TX/RX  ·  decode in {}s", 13 - phase),
+            th.text_faint,
+        )
+    } else {
+        ("cycle: decoding…".to_string(), th.accent)
+    };
+    ui.horizontal(|ui| {
+        ui.label(
+            RichText::new(format!("{} spots", app.session.stores.ft8.len()))
+                .font(FontId::monospace(12.0))
+                .color(th.text_faint),
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(
+                RichText::new(cycle_txt)
+                    .font(FontId::monospace(12.0))
+                    .color(cycle_col),
+            );
+        });
+    });
+    ui.add_space(2.0);
+
+    let mut open_detail: Option<usize> = None;
+    egui::ScrollArea::vertical()
+        .id_salt("ft8")
+        .auto_shrink([false, false])
+        .show(ui, |ui| {
+            if app.session.stores.ft8.is_empty() {
+                ui.label(
+                    RichText::new("no spots yet — waiting for the next 15 s cycle")
+                        .color(th.text_faint),
+                );
+            }
+            for (i, s) in app.session.stores.ft8.iter().enumerate() {
+                let line = format!(
+                    "{} {:>3} {:>+4.1} {:>4}  {}",
+                    s.at.format("%H:%M:%S"),
+                    s.msg.snr,
+                    s.msg.dt,
+                    s.msg.freq,
+                    s.msg.msg,
+                );
+                let selected = in_list && i == sel;
+                let is_cq = s.msg.msg.starts_with("CQ");
+                let fg = if selected {
+                    th.sel_fg
+                } else if is_cq {
+                    th.accent
+                } else {
+                    th.text
+                };
+                let resp = ui.add(
+                    egui::Label::new(
+                        RichText::new(line)
+                            .font(FontId::monospace(12.5))
+                            .color(fg)
+                            .background_color(if selected {
+                                th.sel_bg
+                            } else {
+                                egui::Color32::TRANSPARENT
+                            }),
+                    )
+                    .sense(Sense::click())
+                    .truncate(),
+                );
+                if resp.clicked() {
+                    open_detail = Some(i);
+                }
+            }
+        });
+    if let Some(i) = open_detail {
+        let u = app.mode_ui(mode);
+        u.list_sel = i;
+        u.list_mode = true;
+        list_keys(
+            app,
+            mode,
+            ViewKind::Ft8,
             false,
             true,
             false,

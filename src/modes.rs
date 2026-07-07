@@ -23,6 +23,7 @@ pub enum ModeId {
     Rtty,
     Adsb,
     Ais,
+    Ft8,
     // tools
     Scanner,
     Waterfall,
@@ -37,6 +38,8 @@ pub enum ViewKind {
     Adsb,
     /// AIS ships — same table/radar as ADS-B, marine labels
     Ais,
+    /// FT8 decoded-spot table (windowed 15 s decode)
+    Ft8,
     TextFeed,
     Audio,
     Scanner,
@@ -396,6 +399,30 @@ pub const MODES: &[ModeDef] = &[
         audio_out: false,
         default_hz: 161_975_000,
         presets: &[("AIS ch A", 161_975_000), ("AIS ch B", 162_025_000)],
+    },
+    ModeDef {
+        id: ModeId::Ft8,
+        key: "ft8",
+        label: "FT8",
+        section: Section::Data,
+        desc: "FT8 digital — 15s windowed decode (jt9/ft8_lib)",
+        icon: "F8",
+        icon_ascii: "f8",
+        view: ViewKind::Ft8,
+        pipe: PipeKind::Iq(Demod::Usb),
+        decoder: Some("jt9 --ft8 {wav}"),
+        decoder_rate: 12000,
+        audio_out: false,
+        default_hz: 14_074_000,
+        presets: &[
+            ("40m", 7_074_000),
+            ("30m", 10_136_000),
+            ("20m", 14_074_000),
+            ("17m", 18_100_000),
+            ("15m", 21_074_000),
+            ("10m", 28_074_000),
+            ("6m", 50_313_000),
+        ],
     },
     ModeDef {
         id: ModeId::Scanner,

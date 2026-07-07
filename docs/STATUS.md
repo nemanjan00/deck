@@ -21,6 +21,9 @@ leaves AppRun a symlink into usr/bin (rm before writing or it clobbers deck).
 NOT YET run on real hardware / GL — see FIELD_TESTING.md.
 
 v0.2.0 tagged 2026-07-07 (CHANGELOG has the full list).
+v0.3.0 tagged 2026-07-07 — first hardware-verified digital voice + recordings
+player + AIS-catcher + FT8 groundwork (CHANGELOG has the full list). Push
+pending (sandbox never pushes).
 
 HARDWARE-VERIFIED (2026-07-07, user's Airspy HF+ on a Pi): the GUI runs on
 real GL, and the full digital-voice chain WORKS end to end — D-STAR decodes to
@@ -33,13 +36,24 @@ decoded-audio architecture (recordings player, autorecord, RIFF metadata all
 ride on it). RTL V4 path (rtl-sdr-blog librtlsdr) still to be confirmed on the
 user's V4 dongle.
 
-Post-0.2.0 (committed, unreleased → v0.3.0 candidate): decoded-voice audio
-ownership, recordings explorer + in-app player (scrub/±5s), autorecord, RIFF
-metadata, scope filter overlay + SQ line + focus-to-RF, AIS via AIS-catcher
-(device-generic), Voice viz = RF scope, scope drag-direction fix.
+Shipped in v0.3.0: decoded-voice audio ownership, recordings explorer +
+in-app player (scrub/±5s), autorecord, RIFF metadata, scope filter overlay +
+SQ line + focus-to-RF, AIS via AIS-catcher (device-generic), Voice viz = RF
+scope, scope drag-direction fix.
 
-Remaining roadmap: FT8 (windowed 15s decode — new pattern), stereo WFM, DCS,
-absolute dBµV cal, Airspy R2 (fractional rates).
+Post-0.3.0 (committed, unreleased): **FT8 mode** — the first *windowed*
+decoder (a new pattern next to streaming stdin decoders). deck buffers USB
+demod audio and, on each 15 s UTC slot, writes a 12 kHz WAV and runs a
+one-shot decoder (`jt9 --ft8 {wav}` default; `[decoders] ft8` overrides, e.g.
+`ft8_lib`). Pieces: `parse::ft8` (tolerant spot parser, 4 tests),
+`audio::ft8_window_thread` (buffer→slot→WAV→decode→emit lines), `Plan::Iq
+{windowed}`, `Stores.ft8` + `apply_line` arm, GUI `draw_ft8` spot table (CQ
+highlighted, cycle countdown), sim line feed. NOT verified on-air (no decoder
+installed in this env) — parser + UI + sim path all tested. Needs NTP-accurate
+clock; decoder not bundled in the AppImage (Qt weight).
+
+Remaining roadmap: stereo WFM, DCS, absolute dBµV cal, Airspy R2 (fractional
+rates).
 
 ## Done (v0.1.0)
 

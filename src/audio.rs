@@ -132,6 +132,9 @@ pub struct EngineParams {
     /// decoder writes decoded audio to stdout (dsd-neo -o -): deck plays +
     /// records it, and the IQ pump does not (it only feeds the decoder).
     pub decoder_audio: bool,
+    /// windowed decode (FT8): buffer demod audio into 15 s WAVs and run the
+    /// decoder (`{wav}`) per cycle instead of streaming to stdin.
+    pub windowed: bool,
 }
 
 pub struct RxEngine {
@@ -150,6 +153,8 @@ pub struct RxEngine {
     tx: Sender<AppEvent>,
     /// record the IQ monitor path here (false when a Voice decoder owns audio)
     record_in_pump: bool,
+    /// windowed decode: pump sends demod audio here (FT8)
+    windowed_tx: Option<Sender<Vec<f32>>>,
 }
 
 impl RxEngine {
@@ -167,8 +172,20 @@ impl RxEngine {
             }
             None => (None, None),
         };
+        // FT8 & co.: windowed decode — no streaming decoder. A thread runs
+        // the decoder (`{wav}`) on 15 s UTC-aligned WAVs; the pump feeds it
+        // demod audio via this channel.
+        let windowed_tx = match (p.windowed, &p.decoder_cmd) {
+            (true, Some(cmd)) => {
+                let (atx, arx) = std::sync::mpsc::channel::<Vec<f32>>();
+                let (cmd2, tx2, run) = (cmd.clone(), tx.clone(), p.run);
+                std::thread::spawn(move || ft8_window_thread(arx, cmd2, tx2, run));
+                Some(atx)
+            }
+            _ => None,
+        };
         let (decoder, decoder_stdin) = match &p.decoder_cmd {
-            Some(cmd) => {
+            Some(cmd) if !p.windowed => {
                 let mut sp = spawn_shell(cmd, true, true)?;
                 let stdin = Arc::new(Mutex::new(sp.child.stdin.take()));
                 if p.decoder_audio {
@@ -196,7 +213,7 @@ impl RxEngine {
                 }
                 (Some(sp), Some(stdin))
             }
-            None => (None, None),
+            _ => (None, None),
         };
         let mut eng = Self {
             run: p.run,
@@ -213,6 +230,7 @@ impl RxEngine {
             knobs,
             tx,
             record_in_pump: !p.decoder_audio,
+            windowed_tx,
         };
         eng.spawn_source(&p.source_cmdline)?;
         Ok(eng)
@@ -247,8 +265,9 @@ impl RxEngine {
             let run = self.run;
             let dec = self.decoder_stdin.clone().map(StdinSink);
             let snk = self.sink_stdin.clone().map(StdinSink);
+            let wtx = self.windowed_tx.clone();
             let stop2 = stop.clone();
-            std::thread::spawn(move || pump(stdout, cfg, knobs, dec, snk, tx, run, stop2));
+            std::thread::spawn(move || pump(stdout, cfg, knobs, dec, snk, wtx, tx, run, stop2));
         }
         self.source_stop = stop;
         self.source = Some(sp);
@@ -397,6 +416,84 @@ fn pump_decoded(
     }
 }
 
+/// FT8 windowed decoder. Accumulates the (USB) demod audio and, once per
+/// 15 s UTC slot — a few seconds after the 12.6 s transmission ends —
+/// resamples the window to 12 kHz, writes a WAV, runs the decoder (with
+/// `{wav}` substituted), and emits each output line for the FT8 spot parser.
+/// The decoder is a per-cycle one-shot (jt9/ft8_lib), not a stream.
+fn ft8_window_thread(
+    rx: std::sync::mpsc::Receiver<Vec<f32>>,
+    decoder_cmd: String,
+    tx: Sender<AppEvent>,
+    run: u64,
+) {
+    use crate::pipeline::LineSrc;
+    let mut buf: Vec<f32> = Vec::new();
+    let cap = 48_000 * 16; // ~16 s at 48 kHz
+    let mut last_slot: i64 = -1;
+    let wav = std::env::temp_dir().join(format!("deck-ft8-{run}.wav"));
+    loop {
+        match rx.recv_timeout(Duration::from_millis(250)) {
+            Ok(chunk) => {
+                buf.extend_from_slice(&chunk);
+                while let Ok(c) = rx.try_recv() {
+                    buf.extend_from_slice(&c);
+                }
+            }
+            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+        }
+        if buf.len() > cap {
+            let d = buf.len() - cap;
+            buf.drain(..d);
+        }
+        // UTC 15 s slots; decode ~3 s after the TX window ends
+        let now = chrono::Utc::now().timestamp();
+        let slot = now.div_euclid(15);
+        let phase = now.rem_euclid(15);
+        if phase < 13 || slot == last_slot || (buf.len() as f32) < 48_000.0 * 12.0 {
+            continue;
+        }
+        last_slot = slot;
+        let n = (48_000.0 * 13.5) as usize;
+        let start = buf.len().saturating_sub(n);
+        let mut rs = Resampler::new(48_000, 12_000);
+        let mut out = Vec::with_capacity(n / 4 + 8);
+        rs.process(&buf[start..], &mut out);
+        let write_ok = crate::rec::WavWriter::create(&wav, 12_000)
+            .and_then(|mut w| {
+                w.write_s16(&dsp::f32_to_s16(&out))?;
+                w.finalize(None)
+            })
+            .is_ok();
+        if !write_ok {
+            continue;
+        }
+        let cmd = decoder_cmd.replace("{wav}", &wav.to_string_lossy());
+        if let Ok(o) = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(&cmd)
+            .output()
+        {
+            for line in String::from_utf8_lossy(&o.stdout).lines() {
+                let _ = tx.send(AppEvent::Line {
+                    run,
+                    src: LineSrc::Stdout,
+                    text: crate::pipeline::strip_ansi(line),
+                });
+            }
+            for line in String::from_utf8_lossy(&o.stderr).lines() {
+                let _ = tx.send(AppEvent::Line {
+                    run,
+                    src: LineSrc::Stderr,
+                    text: crate::pipeline::strip_ansi(line),
+                });
+            }
+        }
+    }
+    let _ = std::fs::remove_file(&wav);
+}
+
 #[allow(clippy::too_many_arguments)]
 fn pump(
     mut stdout: impl Read,
@@ -404,6 +501,7 @@ fn pump(
     knobs: Arc<Knobs>,
     decoder: Option<StdinSink>,
     sink: Option<StdinSink>,
+    windowed_tx: Option<Sender<Vec<f32>>>,
     tx: Sender<AppEvent>,
     run: u64,
     stop: Arc<AtomicBool>,
@@ -665,6 +763,11 @@ format={ext}
         }
         if audio.is_empty() {
             continue;
+        }
+
+        // windowed decode (FT8): hand the demod audio to the window thread
+        if let Some(wtx) = &windowed_tx {
+            let _ = wtx.send(audio.clone());
         }
 
         // decoder feed: raw demod audio, resampled to what the decoder wants.

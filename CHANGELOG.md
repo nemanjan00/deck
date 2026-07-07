@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **FT8 mode** (HF digital, author-untested on-air): a *windowed* decoder —
+  deck buffers the USB audio and, once per 15 s UTC slot, writes a 12 kHz WAV
+  and runs a one-shot decoder (`jt9 --ft8 {wav}` by default; override with
+  `[decoders] ft8`, e.g. `ft8_lib`'s `decode_ft8`). Spot table shows
+  UTC · SNR · DT · audio-freq · message with CQ calls highlighted and a live
+  15 s cycle countdown; tap a spot for detail. Standard 40 m–6 m dial presets.
+  Needs an accurate system clock (NTP); decoder not bundled in the AppImage.
+  Sim device feeds the spot table from the generator so the UI works offline.
+
 ## 0.3.0 — 2026-07-07
 
 First hardware-verified digital voice (D-STAR decoded live on an Airspy HF+).
