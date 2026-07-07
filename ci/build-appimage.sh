@@ -55,9 +55,18 @@ for b in rtl_sdr rtl_fm rtl_test multimon-ng sox minimodem hackrf_transfer airsp
 done
 endgroup
 
+group "mbe-neo (source) — dsd-neo's AMBE vocoder dependency"
+git clone --depth 1 https://github.com/arancormonk/mbe-neo "$STAGE/mbe-neo"
+cmake -S "$STAGE/mbe-neo" -B "$STAGE/mbe-neo/build" -DCMAKE_BUILD_TYPE=Release
+cmake --build "$STAGE/mbe-neo/build" -j"$JOBS"
+sudo cmake --install "$STAGE/mbe-neo/build"
+sudo ldconfig
+endgroup
+
 group "dsd-neo (source)"
 git clone --depth 1 https://github.com/arancormonk/dsd-neo "$STAGE/dsd-neo"
-cmake -S "$STAGE/dsd-neo" -B "$STAGE/dsd-neo/build" -DCMAKE_BUILD_TYPE=Release
+cmake -S "$STAGE/dsd-neo" -B "$STAGE/dsd-neo/build" \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local
 cmake --build "$STAGE/dsd-neo/build" -j"$JOBS"
 # binary name has varied (dsd-neo / dsd); grab whatever built.
 found="$(find "$STAGE/dsd-neo/build" -maxdepth 3 -type f -executable \
