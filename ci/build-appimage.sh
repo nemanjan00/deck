@@ -77,7 +77,8 @@ cmake -S "$STAGE/dsd-neo" -B "$STAGE/dsd-neo/build" \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local \
   -DBUILD_TESTING=OFF \
   -DDSD_ENABLE_SOAPYSDR=OFF -DDSD_ENABLE_RTLSDR=OFF \
-  -DDSD_ENABLE_TERMINAL_UI=OFF
+  -DDSD_ENABLE_TERMINAL_UI=OFF \
+  -DDSD_WARNINGS_AS_ERRORS=OFF
 cmake --build "$STAGE/dsd-neo/build" -j"$JOBS"
 # the CLI binary name has varied (dsd-neo / dsd-cli / dsd); grab whatever
 # built, excluding the test binaries, and install it as `dsd-neo`.
