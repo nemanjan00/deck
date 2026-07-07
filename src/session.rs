@@ -377,7 +377,8 @@ impl Session {
                 freq: m.default_hz,
                 gain: self.cfg.sdr.gain,
                 squelch: if mode == ModeId::Scanner { 0.05 } else { 0.0 },
-                monitor: m.audio_out,
+                // analog + digital-voice play by default; data decoders don't
+                monitor: m.audio_out || m.view == ViewKind::Voice,
                 ..Default::default()
             })
     }
@@ -496,6 +497,7 @@ impl Session {
                 decoder_rate,
                 decoder_char_mode,
                 audio_out,
+                decoder_audio,
             } => {
                 let knobs = Knobs::new(freq as i64 - center_hz as i64);
                 knobs.nr.store(f32_bits(nr_level(mp.nr)), Ordering::Relaxed);
@@ -510,9 +512,15 @@ impl Session {
                     .store((mp.tone * 100.0).round() as u32, Ordering::Relaxed);
                 knobs.if_shift.store(mp.if_shift, Ordering::Relaxed);
                 let monitorable = audio_out || decoder_cmd.is_some();
-                knobs
-                    .mute
-                    .store(!(audio_out || mp.monitor), Ordering::Relaxed);
+                // Voice decoders emit decoded audio (deck plays it): play by
+                // default. Analog plays when audio_out; other decoders (pager/
+                // RTTY) stay muted unless the user enables MONITOR.
+                let play = if decoder_audio {
+                    mp.monitor
+                } else {
+                    audio_out || mp.monitor
+                };
+                knobs.mute.store(!play, Ordering::Relaxed);
 
                 let wants_audio = demod != crate::modes::Demod::Raw
                     && (audio_out || decoder_cmd.is_some() || mode == ModeId::Scanner);
@@ -533,6 +541,7 @@ impl Session {
                         decoder_rate,
                         decoder_char_mode,
                         sink_cmd,
+                        decoder_audio,
                     },
                     knobs.clone(),
                     self.tx.clone(),

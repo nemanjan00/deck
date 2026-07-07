@@ -114,10 +114,12 @@ const RTTY_DECODER: &str = "sox -t raw -r 22050 -e signed -b 16 -c 1 - -t wav - 
                             | minimodem --rx --quiet rtty --file /dev/stdin";
 
 macro_rules! dsd {
-    // dsd-neo reads raw PCM16LE mono on stdin; the rate MUST be given with
-    // -s or symbol timing is wrong and nothing syncs. deck feeds 48 kHz.
+    // dsd-neo reads raw PCM16LE mono on stdin (rate via -s, or symbol timing
+    // is wrong and nothing syncs) and writes DECODED voice to stdout (-o -).
+    // deck reads that stdout as audio (postprocess/record/play); call info
+    // comes on stderr. deck feeds/consumes 48 kHz mono s16le.
     ($flag:literal) => {
-        concat!("dsd-neo ", $flag, " -i - -s 48000 -o pulse")
+        concat!("dsd-neo ", $flag, " -i - -s 48000 -o -")
     };
 }
 

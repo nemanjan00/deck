@@ -237,6 +237,9 @@ pub enum Plan {
         decoder_rate: u32,
         decoder_char_mode: bool,
         audio_out: bool,
+        /// decoder writes DECODED audio to stdout (dsd-neo -o -): deck reads
+        /// stdout as 48k s16le audio, stderr as call-info lines.
+        decoder_audio: bool,
     },
 }
 
@@ -354,6 +357,7 @@ pub fn resolve(
                     decoder_rate: m.decoder_rate,
                     decoder_char_mode: mode == ModeId::Rtty,
                     audio_out: m.audio_out,
+                    decoder_audio: mode_def(mode).view == crate::modes::ViewKind::Voice,
                 },
                 missing,
                 note,

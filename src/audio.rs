@@ -123,6 +123,9 @@ pub struct EngineParams {
     pub decoder_rate: u32,
     pub decoder_char_mode: bool,
     pub sink_cmd: Option<String>,
+    /// decoder writes decoded audio to stdout (dsd-neo -o -): deck plays +
+    /// records it, and the IQ pump does not (it only feeds the decoder).
+    pub decoder_audio: bool,
 }
 
 pub struct RxEngine {
@@ -139,6 +142,8 @@ pub struct RxEngine {
     sink_stdin: Option<Arc<Mutex<Option<ChildStdin>>>>,
     pub knobs: Arc<Knobs>,
     tx: Sender<AppEvent>,
+    /// record the IQ monitor path here (false when a Voice decoder owns audio)
+    record_in_pump: bool,
 }
 
 impl RxEngine {
@@ -147,20 +152,42 @@ impl RxEngine {
         knobs: Arc<Knobs>,
         tx: Sender<AppEvent>,
     ) -> std::io::Result<Self> {
-        // decoder first, so it's ready when samples arrive
-        let (decoder, decoder_stdin) = match &p.decoder_cmd {
-            Some(cmd) => {
-                let mut sp = spawn_shell(cmd, true, true)?;
-                let stdin = Arc::new(Mutex::new(sp.child.stdin.take()));
-                attach_line_readers(&mut sp, p.run, &tx, p.decoder_char_mode);
-                (Some(sp), Some(stdin))
-            }
-            None => (None, None),
-        };
+        // sink first, so a Voice decoder's decoded-audio stdout can feed it
         let (sink, sink_stdin) = match &p.sink_cmd {
             Some(cmd) => {
                 let mut sp = spawn_shell(cmd, false, true)?;
                 let stdin = Arc::new(Mutex::new(sp.child.stdin.take()));
+                (Some(sp), Some(stdin))
+            }
+            None => (None, None),
+        };
+        let (decoder, decoder_stdin) = match &p.decoder_cmd {
+            Some(cmd) => {
+                let mut sp = spawn_shell(cmd, true, true)?;
+                let stdin = Arc::new(Mutex::new(sp.child.stdin.take()));
+                if p.decoder_audio {
+                    // stdout = decoded 48 kHz s16le audio → deck's sink +
+                    // recorder (postprocessing lives here); stderr = call info.
+                    if let Some(stderr) = sp.child.stderr.take() {
+                        let (tx2, run) = (tx.clone(), p.run);
+                        std::thread::spawn(move || {
+                            crate::pipeline::read_stream(
+                                stderr,
+                                run,
+                                crate::pipeline::LineSrc::Stderr,
+                                tx2,
+                                false,
+                            )
+                        });
+                    }
+                    if let Some(stdout) = sp.child.stdout.take() {
+                        let snk = sink_stdin.clone().map(StdinSink);
+                        let (knobs2, tx2, run) = (knobs.clone(), tx.clone(), p.run);
+                        std::thread::spawn(move || pump_decoded(stdout, snk, knobs2, tx2, run));
+                    }
+                } else {
+                    attach_line_readers(&mut sp, p.run, &tx, p.decoder_char_mode);
+                }
                 (Some(sp), Some(stdin))
             }
             None => (None, None),
@@ -179,6 +206,7 @@ impl RxEngine {
             sink_stdin,
             knobs,
             tx,
+            record_in_pump: !p.decoder_audio,
         };
         eng.spawn_source(&p.source_cmdline)?;
         Ok(eng)
@@ -206,6 +234,7 @@ impl RxEngine {
                 rate: self.rate,
                 demod: self.demod,
                 decoder_rate: self.decoder_rate,
+                record: self.record_in_pump,
             };
             let knobs = self.knobs.clone();
             let tx = self.tx.clone();
@@ -259,6 +288,8 @@ struct PumpCfg {
     rate: u32,
     demod: Demod,
     decoder_rate: u32,
+    /// record the monitor path (false when a decoder owns the audio output)
+    record: bool,
 }
 
 /// Per-demod DSP state.
@@ -276,6 +307,55 @@ enum Detector {
     },
     Ssb(SsbDemod),
     Raw,
+}
+
+/// Read a Voice decoder's DECODED audio (dsd-neo `-o -`, 48 kHz s16le mono
+/// on its stdout), play it to the sink, and record it. This is where deck
+/// owns the digital-voice audio; the discriminator pump only feeds the
+/// decoder. Ends when the decoder's stdout closes.
+fn pump_decoded(mut stdout: impl Read, sink: Option<StdinSink>, knobs: Arc<Knobs>, tx: Sender<AppEvent>, run: u64) {
+    let mut buf = vec![0u8; 8192];
+    let mut recorder: Option<crate::rec::WavWriter> = None;
+    loop {
+        let n = match stdout.read(&mut buf) {
+            Ok(0) | Err(_) => break,
+            Ok(n) => n,
+        };
+        let pcm = &buf[..n];
+        if let Some(snk) = &sink {
+            if !knobs.mute.load(Ordering::Relaxed) {
+                snk.write(pcm);
+            }
+        }
+        let want = knobs.record.lock().ok().and_then(|g| g.clone());
+        match (&want, recorder.is_some()) {
+            (Some(path), false) => {
+                if let Ok(w) = crate::rec::WavWriter::create(path, 48_000) {
+                    let _ = tx.send(AppEvent::Rec {
+                        run,
+                        path: Some(w.path.to_string_lossy().into_owned()),
+                    });
+                    recorder = Some(w);
+                }
+            }
+            (None, true) => {
+                if let Some(w) = recorder.take() {
+                    let _ = w.finalize();
+                }
+                let _ = tx.send(AppEvent::Rec { run, path: None });
+            }
+            _ => {}
+        }
+        if let Some(w) = &mut recorder {
+            if w.write_s16(pcm).is_err() {
+                recorder = None;
+            }
+        }
+    }
+    if let Some(w) = recorder.take() {
+        let _ = w.finalize();
+        let _ = tx.send(AppEvent::Rec { run, path: None });
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -613,14 +693,25 @@ format={ext}
             mon.iter_mut().for_each(|x| *x = 0.0);
         }
 
-        if let Some(snk) = &sink {
-            if !knobs.mute.load(Ordering::Relaxed) {
-                snk.write(&dsp::f32_to_s16(&mon));
+        // Only play the discriminator monitor when this pump owns the audio.
+        // For Voice decoders (cfg.record == false) pump_decoded owns the sink,
+        // so the IQ pump must stay off it or the two mix.
+        if cfg.record {
+            if let Some(snk) = &sink {
+                if !knobs.mute.load(Ordering::Relaxed) {
+                    snk.write(&dsp::f32_to_s16(&mon));
+                }
             }
         }
 
-        // recording (squelch-aware: closed-gate static isn't written)
-        let want_rec = knobs.record.lock().ok().and_then(|g| g.clone());
+        // recording (squelch-aware: closed-gate static isn't written).
+        // Skipped when a decoder owns the audio — pump_decoded records the
+        // DECODED voice instead of this discriminator audio.
+        let want_rec = if cfg.record {
+            knobs.record.lock().ok().and_then(|g| g.clone())
+        } else {
+            None
+        };
         match (&want_rec, recorder.is_some()) {
             (Some(path), false) => match crate::rec::WavWriter::create(path, 48_000) {
                 Ok(w) => {
