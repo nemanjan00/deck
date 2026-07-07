@@ -477,7 +477,7 @@ impl DeckApp {
                     self.nav_cooldown = 1;
                 }
             }
-            Screen::Recordings => misc::recordings_keys(self, esc, enter, up, down, right),
+            Screen::Recordings => misc::recordings_keys(self, esc, enter, up, down, left, right),
         }
     }
 

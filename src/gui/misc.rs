@@ -232,7 +232,7 @@ pub struct RecordingsState {
     pub entries: Vec<crate::rec::RecEntry>,
     pub sel: usize,
     pub dir: std::path::PathBuf,
-    pub player: Option<crate::pipeline::Spawned>,
+    pub player: Option<crate::rec::WavPlayer>,
 }
 
 impl RecordingsState {
@@ -245,9 +245,7 @@ impl RecordingsState {
     }
 
     fn stop_player(&mut self) {
-        if let Some(sp) = self.player.take() {
-            crate::pipeline::kill_group(sp.pgid);
-        }
+        self.player = None; // Drop pauses + tears down the sink
     }
 }
 
@@ -345,19 +343,103 @@ pub fn draw_recordings(app: &mut DeckApp, ctx: &egui::Context) {
                 );
             });
     }
+    // transport bar for the loaded player
+    let mut seek_to: Option<f32> = None;
+    let mut toggle = false;
+    let mut nudge: Option<f32> = None;
+    if let Some(p) = &app.recordings.player {
+        let th = app.th.clone();
+        let (pos, dur, playing) = (p.position(), p.duration().max(0.001), p.is_playing());
+        let name = p
+            .path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        egui::TopBottomPanel::bottom("transport")
+            .frame(
+                egui::Frame::none()
+                    .fill(th.panel_hi)
+                    .inner_margin(10.0)
+                    .stroke(Stroke::new(1.0, th.outline)),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if ui
+                        .add(egui::Button::new(RichText::new("|◀").size(16.0)).frame(false))
+                        .clicked()
+                    {
+                        nudge = Some(-5.0);
+                    }
+                    if ui
+                        .add(
+                            egui::Button::new(
+                                RichText::new(if playing { "⏸" } else { "▶" })
+                                    .size(18.0)
+                                    .color(th.accent),
+                            )
+                            .frame(false),
+                        )
+                        .clicked()
+                    {
+                        toggle = true;
+                    }
+                    if ui
+                        .add(egui::Button::new(RichText::new("▶|").size(16.0)).frame(false))
+                        .clicked()
+                    {
+                        nudge = Some(5.0);
+                    }
+                    let fmt = |s: f32| format!("{:02}:{:02}", (s as u32) / 60, (s as u32) % 60);
+                    ui.label(
+                        RichText::new(format!("{} / {}", fmt(pos), fmt(dur)))
+                            .font(FontId::monospace(13.0))
+                            .color(th.text),
+                    );
+                });
+                // clickable/scrubbable progress bar
+                let (bar, resp) = ui.allocate_exact_size(
+                    Vec2::new(ui.available_width(), 16.0),
+                    Sense::click_and_drag(),
+                );
+                let p2 = ui.painter();
+                p2.rect_filled(bar, 4.0, th.panel);
+                let t = (pos / dur).clamp(0.0, 1.0);
+                let mut fill = bar;
+                fill.set_width(bar.width() * t);
+                p2.rect_filled(fill, 4.0, th.accent.linear_multiply(0.7));
+                if let Some(m) = resp.interact_pointer_pos() {
+                    if resp.clicked() || resp.dragged() {
+                        let f = ((m.x - bar.min.x) / bar.width()).clamp(0.0, 1.0);
+                        seek_to = Some(f * dur);
+                    }
+                }
+                ui.label(RichText::new(name).size(10.5).color(th.text_dim));
+            });
+    }
+    if let Some(p) = &app.recordings.player {
+        if toggle {
+            p.toggle();
+        }
+        if let Some(s) = seek_to {
+            p.seek(s);
+        }
+        if let Some(d) = nudge {
+            p.seek_by(d);
+        }
+    }
+
     if let Some(i) = play {
         app.recordings.sel = i;
-        toggle_play(app, i);
+        open_or_toggle(app, i);
     }
     if let Some(i) = delete {
         delete_recording(app, i);
     }
 }
 
-/// Play a WAV via the system player (paplay/aplay handle the header). Raw IQ
-/// files aren't audio — selecting one shows a hint instead.
-fn toggle_play(app: &mut DeckApp, i: usize) {
-    app.recordings.stop_player();
+/// Open the selected recording in the player (or toggle play/pause if it's
+/// already loaded). Raw IQ captures aren't playable as audio.
+fn open_or_toggle(app: &mut DeckApp, i: usize) {
     let Some(e) = app.recordings.entries.get(i) else {
         return;
     };
@@ -366,23 +448,28 @@ fn toggle_play(app: &mut DeckApp, i: usize) {
             .set_status("raw IQ capture — not playable as audio");
         return;
     }
-    let player = if app.session.tools.has("paplay") {
-        "paplay"
-    } else if app.session.tools.has("aplay") {
-        "aplay"
-    } else {
-        app.session
-            .set_status("no audio player found (paplay/aplay)");
+    let already = app
+        .recordings
+        .player
+        .as_ref()
+        .map(|p| p.path == e.path)
+        .unwrap_or(false);
+    if already {
+        if let Some(p) = &app.recordings.player {
+            p.toggle();
+        }
         return;
-    };
-    let cmd = format!("{player} '{}'", e.path.to_string_lossy());
-    match crate::pipeline::spawn_shell(&cmd, false, false) {
-        Ok(sp) => {
-            let name = e.name.clone();
-            app.recordings.player = Some(sp);
+    }
+    let path = e.path.clone();
+    let name = e.name.clone();
+    match crate::rec::WavPlayer::open(&path) {
+        Some(p) => {
+            app.recordings.player = Some(p);
             app.session.set_status(format!("playing {name}"));
         }
-        Err(err) => app.session.set_status(format!("play failed: {err}")),
+        None => app
+            .session
+            .set_status("cannot play (no paplay/aplay, or bad file)"),
     }
 }
 
@@ -395,12 +482,14 @@ fn delete_recording(app: &mut DeckApp, i: usize) {
     app.session.set_status("deleted");
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn recordings_keys(
     app: &mut DeckApp,
     esc: bool,
     enter: bool,
     up: bool,
     down: bool,
+    left: bool,
     right: bool,
 ) {
     let n = app.recordings.entries.len();
@@ -411,14 +500,30 @@ pub fn recordings_keys(
         app.recordings.sel = (app.recordings.sel + 1).min(n - 1);
     }
     if enter {
-        toggle_play(app, app.recordings.sel);
+        open_or_toggle(app, app.recordings.sel);
     }
-    if right {
-        delete_recording(app, app.recordings.sel);
+    // with a player loaded, ←/→ scrub ∓5 s; otherwise → deletes the row
+    match &app.recordings.player {
+        Some(p) => {
+            if left {
+                p.seek_by(-5.0);
+            }
+            if right {
+                p.seek_by(5.0);
+            }
+        }
+        None => {
+            if right {
+                delete_recording(app, app.recordings.sel);
+            }
+        }
     }
     if esc {
-        app.recordings.stop_player();
-        app.screen = Screen::Menu;
+        if app.recordings.player.is_some() {
+            app.recordings.stop_player(); // first BACK stops playback
+        } else {
+            app.screen = Screen::Menu;
+        }
     }
 }
 

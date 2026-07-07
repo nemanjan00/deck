@@ -203,6 +203,174 @@ impl WavWriter {
     }
 }
 
+// ------------------------------------------------------------- WAV player
+
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Arc;
+
+/// In-app WAV player with pause/seek. A feeder thread streams the PCM to an
+/// audio sink from a shared byte cursor; play/pause/seek bump a generation
+/// counter so the old feeder tears down its sink and a fresh one starts at
+/// the new position (clean, flush-free seeking).
+pub struct WavPlayer {
+    pub path: PathBuf,
+    data: Arc<Vec<u8>>,
+    data_off: usize,
+    rate: u32,
+    pos: Arc<AtomicU64>, // byte offset into the data chunk
+    playing: Arc<AtomicBool>,
+    generation: Arc<AtomicU64>,
+    sink_cmd: String,
+}
+
+fn player_sink_cmd(rate: u32) -> Option<String> {
+    if crate::pipeline::which("paplay").is_some() {
+        Some(format!(
+            "paplay --raw --rate={rate} --format=s16le --channels=1"
+        ))
+    } else if crate::pipeline::which("aplay").is_some() {
+        Some(format!("aplay -q -t raw -f S16_LE -r {rate} -c 1 -"))
+    } else {
+        None
+    }
+}
+
+/// Find the `data` chunk (offset, len) and sample rate in a WAV byte buffer.
+fn wav_data_chunk(b: &[u8]) -> Option<(usize, usize, u32)> {
+    if b.len() < 12 || &b[..4] != b"RIFF" || &b[8..12] != b"WAVE" {
+        return None;
+    }
+    let mut rate = 0u32;
+    let mut i = 12;
+    while i + 8 <= b.len() {
+        let id = &b[i..i + 4];
+        let sz = u32::from_le_bytes([b[i + 4], b[i + 5], b[i + 6], b[i + 7]]) as usize;
+        let body = i + 8;
+        if id == b"fmt " && body + 16 <= b.len() {
+            rate = u32::from_le_bytes([b[body + 4], b[body + 5], b[body + 6], b[body + 7]]);
+        } else if id == b"data" {
+            return Some((body, sz.min(b.len().saturating_sub(body)), rate));
+        }
+        i = body + sz + (sz & 1);
+    }
+    None
+}
+
+impl WavPlayer {
+    pub fn open(path: &Path) -> Option<Self> {
+        let bytes = std::fs::read(path).ok()?;
+        let (off, len, rate) = wav_data_chunk(&bytes)?;
+        let rate = if rate == 0 { 48_000 } else { rate };
+        let sink_cmd = player_sink_cmd(rate)?;
+        let mut data = bytes;
+        data.truncate(off + len);
+        let p = Self {
+            path: path.to_path_buf(),
+            data: Arc::new(data),
+            data_off: off,
+            rate,
+            pos: Arc::new(AtomicU64::new(0)),
+            playing: Arc::new(AtomicBool::new(false)),
+            generation: Arc::new(AtomicU64::new(0)),
+            sink_cmd,
+        };
+        p.play();
+        Some(p)
+    }
+
+    pub fn duration(&self) -> f32 {
+        (self.data.len() - self.data_off) as f32 / (self.rate as f32 * 2.0)
+    }
+
+    pub fn position(&self) -> f32 {
+        self.pos.load(Ordering::Relaxed) as f32 / (self.rate as f32 * 2.0)
+    }
+
+    pub fn is_playing(&self) -> bool {
+        self.playing.load(Ordering::Relaxed)
+    }
+
+    pub fn toggle(&self) {
+        if self.is_playing() {
+            self.pause();
+        } else {
+            self.play();
+        }
+    }
+
+    pub fn pause(&self) {
+        self.playing.store(false, Ordering::Relaxed);
+        self.generation.fetch_add(1, Ordering::Relaxed); // old feeder tears down
+    }
+
+    /// Seek to `secs` (clamped); resumes playing from there if it was playing.
+    pub fn seek(&self, secs: f32) {
+        let total = (self.data.len() - self.data_off) as f32;
+        let mut b = (secs * self.rate as f32 * 2.0).clamp(0.0, total) as u64;
+        b &= !1; // 2-byte align
+        let was = self.is_playing();
+        self.generation.fetch_add(1, Ordering::Relaxed);
+        self.pos.store(b, Ordering::Relaxed);
+        if was {
+            self.play();
+        }
+    }
+
+    pub fn seek_by(&self, secs: f32) {
+        self.seek((self.position() + secs).max(0.0));
+    }
+
+    fn play(&self) {
+        let gen = self.generation.fetch_add(1, Ordering::Relaxed) + 1;
+        self.playing.store(true, Ordering::Relaxed);
+        let data = self.data.clone();
+        let data_off = self.data_off;
+        let pos = self.pos.clone();
+        let playing = self.playing.clone();
+        let generation = self.generation.clone();
+        let cmd = self.sink_cmd.clone();
+        // ~20 ms chunks, paced just under real time so the sink buffer stays
+        // shallow and pause/seek respond promptly.
+        let chunk = (self.rate as usize / 50 * 2).max(1920);
+        std::thread::spawn(move || {
+            let Ok(mut sink) = crate::pipeline::spawn_shell(&cmd, false, true) else {
+                playing.store(false, Ordering::Relaxed);
+                return;
+            };
+            let mut stdin = sink.child.stdin.take();
+            let total = data.len();
+            loop {
+                if generation.load(Ordering::Relaxed) != gen {
+                    break; // superseded by pause/seek/new play
+                }
+                let p = pos.load(Ordering::Relaxed) as usize + data_off;
+                if p >= total {
+                    playing.store(false, Ordering::Relaxed);
+                    break;
+                }
+                let end = (p + chunk).min(total);
+                let ok = stdin
+                    .as_mut()
+                    .map(|w| w.write_all(&data[p..end]).is_ok())
+                    .unwrap_or(false);
+                if !ok {
+                    break;
+                }
+                pos.fetch_add((end - p) as u64, Ordering::Relaxed);
+                std::thread::sleep(std::time::Duration::from_millis(18));
+            }
+            drop(stdin);
+            crate::pipeline::kill_group(sink.pgid);
+        });
+    }
+}
+
+impl Drop for WavPlayer {
+    fn drop(&mut self) {
+        self.pause();
+    }
+}
+
 /// Where recordings land: config override → XDG music dir → ~/deck-recordings.
 pub fn recordings_dir(cfg_dir: &str) -> PathBuf {
     if !cfg_dir.is_empty() {
