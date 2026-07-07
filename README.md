@@ -38,9 +38,9 @@ drag the waterfall to retune, 44 px+ targets throughout.
 |---|---|
 | ![Waterfall](docs/shots/waterfall.png) | ![Scanner](docs/shots/scanner.png) |
 
-| POCSAG pager feed | ADS-B aircraft table |
+| POCSAG pager feed | ADS-B offline radar (table view too) |
 |---|---|
-| ![POCSAG](docs/shots/pocsag.png) | ![ADS-B](docs/shots/adsb.png) |
+| ![POCSAG](docs/shots/pocsag.png) | ![ADS-B radar](docs/shots/adsb-radar.png) |
 
 <details>
 <summary><b>Light theme & square handhelds (tap to expand)</b></summary>
@@ -52,6 +52,10 @@ drag the waterfall to retune, 44 px+ targets throughout.
 | Light RX | Square menu |
 |---|---|
 | ![nfm light](docs/shots/nfm-light.png) | ![menu square](docs/shots/menu-sq.png) |
+
+| ADS-B table view |
+|---|
+| ![adsb table](docs/shots/adsb.png) |
 
 </details>
 
@@ -92,8 +96,8 @@ released first, so nothing ever fights over the radio.
 | **Digital voice** | DMR · YSF · D-STAR · NXDN · P25 · M17 | `dsd-neo` | live call card: TG, SRC, slot, color code, NAC/RAN |
 | **Data** | POCSAG · APRS | `multimon-ng` | typed message tables with detail popups |
 | | RTTY | `sox` + `minimodem` | 45.45 Bd Baudot text feed |
-| | ADS-B | `dump1090` / `readsb` / `rtl1090` | live aircraft table via SBS :30003 |
-| **Tools** | Scanner | — | dwell/hold/lockout, per-channel hit counters |
+| | ADS-B | `dump1090` / `readsb` / `rtl1090` | offline radar map + aircraft table via SBS :30003 |
+| **Tools** | Scanner | — | dwell/hold/lockout, priority channel, hit counters |
 | | Waterfall | — | full-band scope, drag-to-tune, click-to-jump |
 
 **Devices:** RTL-SDR (24–1766 MHz) and Airspy HF+ (9 kHz–31 MHz, 60–260 MHz)
@@ -117,7 +121,15 @@ tracking, DC-spike filtered) and lists them under the fall — tap one to tune,
 or hand it straight off to any mode (`OPEN IN` / double-tap) and RX starts
 there. SPAN zooms 2.4 MHz → 300 kHz around the marker, with KC908-style
 MKR/PK level readouts. Any frequency can be saved as a **memory channel**
-(starred in the preset picker, persisted).
+(starred in the preset picker, persisted) — including straight from the peak
+list (`mem+`), KC908 search-and-store style.
+
+**ADS-B radar:** a fully offline radar view (no map tiles) — range rings
+around your `[adsb] lat/lon` home (or auto-centered on traffic),
+track-rotated aircraft arrows colored by altitude, position trails. The
+scanner also honors a **priority channel** (revisited every few hops), and
+**F12** drops an in-app screenshot into `~/Music/deck/screens/` for field
+logging.
 
 Decoders always receive the *raw* demodulated audio — your listening comfort
 never degrades the decode.

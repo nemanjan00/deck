@@ -10,6 +10,11 @@
 - KC908-inspired: SPAN zoom (full/2/4/8x around the marker), MKR/PK
   measurement readout on the scope, memory channels (saved from any mode,
   starred in preset picker, persisted)
+- Scanner priority channel (persisted; revisited every 4 hops; LEFT/P)
+- Peak list: LEFT / mem+ saves a peak straight to memory channels
+- ADS-B offline radar view: range rings, home QTH ([adsb] lat/lon or traffic
+  centroid), track-rotated altitude-colored arrows, position trails
+- F12 in-app screenshot to recordings/screens/ (field logging)
 
 ## 0.1.0 — 2026-07-06
 
