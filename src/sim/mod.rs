@@ -9,6 +9,7 @@
 //! * decoded lines (`--lines`): synthetic decoder output for any mode.
 
 pub mod adsb;
+pub mod ais;
 pub mod ax25;
 pub mod band;
 pub mod baudot;
@@ -109,7 +110,7 @@ pub fn run(args: SimArgs) -> Result<()> {
         "pocsag" => run_audio_pocsag(&args),
         "aprs" => run_audio_aprs(&args),
         "rtty" => run_audio_rtty(&args),
-        "dmr" | "ysf" | "dstar" | "nxdn" | "p25" | "m17" | "adsb" => {
+        "dmr" | "ysf" | "dstar" | "nxdn" | "p25" | "m17" | "adsb" | "ais" => {
             // these can't be synthesized at signal level — line feed instead
             run_lines(&args)
         }
@@ -373,6 +374,22 @@ fn run_lines(args: &SimArgs) -> Result<()> {
     let mut rng = Rng::new(args.seed);
     let mut n = 0u32;
     match args.mode.as_str() {
+        "ais" => {
+            let mut fleet = ais::BoatFleet::new(args.seed, 6, 44.8, 13.9);
+            loop {
+                n += 1;
+                for line in fleet.step(1.0) {
+                    if !out_ok(writeln!(out, "{line}"))? {
+                        return Ok(());
+                    }
+                }
+                out.flush().ok();
+                if args.count > 0 && n >= args.count {
+                    return Ok(());
+                }
+                sleep_ms(1000, args.fast);
+            }
+        }
         "adsb" => {
             let mut fleet = adsb::Fleet::new(args.seed, 6, 44.8, 20.3);
             loop {

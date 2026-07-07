@@ -71,7 +71,7 @@ fn controls_for(mode: ModeId) -> Vec<Ctl> {
         }
         v.push(Ctl::MemSave);
     }
-    if mode == ModeId::Adsb {
+    if matches!(mode, ModeId::Adsb | ModeId::Ais) {
         v.push(Ctl::Viz);
     }
     v.push(Ctl::Log);
@@ -125,6 +125,7 @@ fn has_list(view: ViewKind) -> bool {
         ViewKind::Pager
             | ViewKind::Aprs
             | ViewKind::Adsb
+            | ViewKind::Ais
             | ViewKind::Scanner
             | ViewKind::Voice
             | ViewKind::Waterfall
@@ -217,7 +218,7 @@ fn ctl_value(app: &DeckApp, mode: ModeId, c: Ctl) -> String {
         },
         Ctl::Viz => {
             let v = ui.map(|u| u.viz).unwrap_or(0);
-            if mode == ModeId::Adsb {
+            if matches!(mode, ModeId::Adsb | ModeId::Ais) {
                 ["table", "radar"][(v as usize) % 2].into()
             } else {
                 viz_label(v).into()
@@ -310,7 +311,11 @@ fn adjust(app: &mut DeckApp, mode: ModeId, c: Ctl, dir: i32) {
             Ctl::Det => mp.det = if mp.det == 1 { 0 } else { 1 },
             Ctl::Mon => mp.monitor = !mp.monitor,
             Ctl::Viz => {
-                let n = if mode == ModeId::Adsb { 2 } else { 4 };
+                let n = if matches!(mode, ModeId::Adsb | ModeId::Ais) {
+                    2
+                } else {
+                    4
+                };
                 ui.viz = ((ui.viz as i32 + dir).rem_euclid(n)) as u8;
                 return;
             }
@@ -599,7 +604,7 @@ fn list_keys(
     let len = match view {
         ViewKind::Pager => app.session.stores.pagers.len(),
         ViewKind::Aprs => app.session.stores.aprs.len(),
-        ViewKind::Adsb => app.session.stores.aircraft.len(),
+        ViewKind::Adsb | ViewKind::Ais => app.session.stores.aircraft.len(),
         ViewKind::Scanner => app.session.scan.channels.len(),
         ViewKind::Voice => app.session.stores.call_history.len(),
         ViewKind::Waterfall => app.session.stores.peaks.len(),
@@ -855,7 +860,7 @@ fn draw_left(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, com
         let count = match view {
             ViewKind::Pager => app.session.stores.pagers.len(),
             ViewKind::Aprs => app.session.stores.aprs.len(),
-            ViewKind::Adsb => app.session.stores.aircraft.len(),
+            ViewKind::Adsb | ViewKind::Ais => app.session.stores.aircraft.len(),
             ViewKind::Scanner => app.session.scan.channels.len(),
             ViewKind::Voice => app.session.stores.call_history.len(),
             ViewKind::Waterfall => app.session.stores.peaks.len(),
@@ -889,7 +894,7 @@ fn draw_right(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
     let viz_h = match view {
         ViewKind::Audio => (avail_h * 0.52).clamp(120.0, 420.0),
         ViewKind::Waterfall => (avail_h * 0.62).max(160.0),
-        ViewKind::Adsb => 0.0,
+        ViewKind::Adsb | ViewKind::Ais => 0.0,
         _ => 92.0,
     };
     if viz_h > 0.0 {
@@ -902,7 +907,7 @@ fn draw_right(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
         ViewKind::Voice => draw_voice(app, ui, mode, th),
         ViewKind::Pager => draw_pager(app, ui, mode, th),
         ViewKind::Aprs => draw_aprs(app, ui, mode, th),
-        ViewKind::Adsb => draw_adsb(app, ui, mode, th),
+        ViewKind::Adsb | ViewKind::Ais => draw_adsb(app, ui, mode, th),
         ViewKind::TextFeed => draw_textfeed(app, ui, th),
         ViewKind::Scanner => draw_scanner(app, ui, mode, th),
         ViewKind::Waterfall => draw_peaks(app, ui, mode, th),

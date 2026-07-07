@@ -99,6 +99,49 @@ impl AircraftStore {
         true
     }
 
+    /// Merge an AIS message — ships share the aircraft store (mmsi as id,
+    /// name as callsign, SOG as ground speed, COG as track).
+    pub fn push_ais(&mut self, m: &crate::parse::ais::AisMsg, now: Instant) {
+        let id = m.mmsi.to_string();
+        self.total_msgs += 1;
+        let entry = self.map.entry(id.clone()).or_insert_with(|| {
+            (
+                Aircraft {
+                    icao: id,
+                    ..Default::default()
+                },
+                now,
+            )
+        });
+        let (ac, last) = entry;
+        *last = now;
+        ac.msgs += 1;
+        if let Some(n) = &m.name {
+            ac.callsign = n.clone();
+        }
+        if let Some(v) = m.sog {
+            ac.gs = Some(v);
+        }
+        if let Some(v) = m.cog {
+            ac.trk = Some(v);
+        }
+        if let (Some(la), Some(lo)) = (m.lat, m.lon) {
+            ac.lat = Some(la);
+            ac.lon = Some(lo);
+            if ac
+                .trail
+                .last()
+                .map(|(a, b)| (a - la).abs() > 1e-5 || (b - lo).abs() > 1e-5)
+                .unwrap_or(true)
+            {
+                ac.trail.push((la, lo));
+                if ac.trail.len() > 24 {
+                    ac.trail.remove(0);
+                }
+            }
+        }
+    }
+
     pub fn purge(&mut self, now: Instant, max_age_s: u64) {
         self.map
             .retain(|_, (_, last)| now.duration_since(*last).as_secs() <= max_age_s);

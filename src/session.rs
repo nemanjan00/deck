@@ -152,6 +152,7 @@ pub struct Stores {
     pub pagers: VecDeque<Timed<PagerMsg>>,
     pub aprs: VecDeque<Timed<AprsMsg>>,
     aprs_parser: AprsParser,
+    ais_parser: crate::parse::ais::AisParser,
     pub textfeed: String,
     pub aircraft: AircraftStore,
     pub call: Option<LiveCall>,
@@ -179,6 +180,7 @@ impl Stores {
             pagers: VecDeque::new(),
             aprs: VecDeque::new(),
             aprs_parser: AprsParser::new(),
+            ais_parser: crate::parse::ais::AisParser::new(),
             textfeed: String::new(),
             aircraft: AircraftStore::new(),
             call: None,
@@ -711,6 +713,14 @@ impl Session {
                     self.stores.decoded += 1;
                 }
             }
+            ViewKind::Ais => {
+                if src != LineSrc::Stderr {
+                    if let Some(m) = self.stores.ais_parser.push(&text) {
+                        self.stores.decoded += 1;
+                        self.stores.aircraft.push_ais(&m, Instant::now());
+                    }
+                }
+            }
             ViewKind::TextFeed => {
                 if src == LineSrc::Stdout {
                     self.stores.decoded += 1;
@@ -778,10 +788,10 @@ impl Session {
         if self
             .running
             .as_ref()
-            .map(|r| mode_def(r.mode).view == ViewKind::Adsb)
+            .map(|r| matches!(mode_def(r.mode).view, ViewKind::Adsb | ViewKind::Ais))
             .unwrap_or(false)
         {
-            self.stores.aircraft.purge(now, 90);
+            self.stores.aircraft.purge(now, 600);
         }
 
         if let Some((_, at)) = &self.status {

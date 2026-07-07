@@ -57,6 +57,8 @@ fn extern_template(dev: SdrKind, mode: ModeId) -> Option<String> {
                 .into(),
         ),
         (SdrKind::AirspyHf, ModeId::Adsb) => None, // 1090 MHz out of range
+        (SdrKind::RtlSdr, ModeId::Ais) => Some("rtl_ais -d {device} -n -g {gain} -p {ppm}".into()),
+        (SdrKind::AirspyHf, ModeId::Ais) => None, // rtl_ais is RTL-only
         (SdrKind::Sim, m) => Some(format!(
             "'{{deck}}' simgen --mode {} --lines",
             mode_def(m).key
@@ -160,6 +162,8 @@ pub const KNOWN_TOOLS: &[&str] = &[
     "multimon-ng",
     "dump1090",
     "readsb",
+    "rtl_ais",
+    "AIS-catcher",
     "sox",
     "minimodem",
     "paplay",
