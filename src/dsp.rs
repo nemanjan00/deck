@@ -773,11 +773,18 @@ const SSB_HALF_BW: f32 = 1400.0;
 
 impl SsbDemod {
     pub fn new(fs: f32, usb: bool) -> Self {
+        Self::with_shift(fs, usb, 0)
+    }
+
+    /// `shift_hz` moves the passband window relative to the carrier
+    /// (classic IF shift) without changing audio pitch.
+    pub fn with_shift(fs: f32, usb: bool, shift_hz: i32) -> Self {
         let sign = if usb { -1.0 } else { 1.0 };
+        let center = SSB_CENTER + f64::from(shift_hz);
         let lp = Biquad::lowpass(fs, SSB_HALF_BW, 0.707);
         Self {
-            down: Nco::new(sign * SSB_CENTER, fs as f64),
-            up: Nco::new(-sign * SSB_CENTER, fs as f64),
+            down: Nco::new(sign * center, fs as f64),
+            up: Nco::new(-sign * center, fs as f64),
             lp_i: [lp; 3],
             lp_q: [lp; 3],
             agc: Agc::new(0.5),

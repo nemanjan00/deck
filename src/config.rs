@@ -26,10 +26,17 @@ pub struct Config {
 pub struct SdrCfg {
     pub ppm: i32,
     pub gain: f32,
+    /// display calibration offset in dB, added to band level readouts
+    /// (relative levels unless you calibrate against a known source)
+    pub cal_db: f32,
 }
 impl Default for SdrCfg {
     fn default() -> Self {
-        Self { ppm: 0, gain: 32.8 }
+        Self {
+            ppm: 0,
+            gain: 32.8,
+            cal_db: 0.0,
+        }
     }
 }
 
@@ -173,6 +180,8 @@ pub struct ModePersist {
     pub det: u8,
     /// CTCSS tone squelch in Hz (0 = off)
     pub tone: f32,
+    /// SSB passband (IF) shift in Hz
+    pub if_shift: i32,
     /// monitor audio toggle for decoder modes
     pub monitor: bool,
 }

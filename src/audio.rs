@@ -23,7 +23,7 @@ use crate::pipeline::{
 use rustfft::num_complex::Complex32;
 use std::io::{Read, Write};
 use std::process::ChildStdin;
-use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, AtomicU32, Ordering};
 use std::sync::mpsc::Sender;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -47,6 +47,8 @@ pub struct Knobs {
     pub sync_det: AtomicBool,
     /// CTCSS tone squelch in centi-Hz (0 = off); gate needs this tone
     pub tone_chz: AtomicU32,
+    /// SSB passband (IF) shift in Hz
+    pub if_shift: AtomicI32,
     /// Some(path) = record the monitor audio to this WAV; None = stop.
     pub record: Mutex<Option<std::path::PathBuf>>,
 }
@@ -72,6 +74,7 @@ impl Knobs {
             mute: AtomicBool::new(false),
             sync_det: AtomicBool::new(false),
             tone_chz: AtomicU32::new(0),
+            if_shift: AtomicI32::new(0),
             record: Mutex::new(None),
         })
     }
@@ -355,6 +358,8 @@ fn pump(
     let mut gate_open = false;
     let mut recorder: Option<crate::rec::WavWriter> = None;
     let mut ctcss = CtcssDet::new(48_000);
+    let mut cur_if_shift: i32 = 0;
+    let mut iq_rec: Option<std::fs::File> = None;
 
     let bytes_per = match cfg.format {
         IqFormat::Cu8 => 2usize,
@@ -399,12 +404,75 @@ fn pump(
             continue;
         }
 
+        // IQ recording (waterfall sessions): raw source bytes to disk
+        if matches!(cfg.demod, Demod::Raw) {
+            let want = knobs.record.lock().ok().and_then(|g| g.clone());
+            match (&want, iq_rec.is_some()) {
+                (Some(base), false) => {
+                    let ext = match cfg.format {
+                        IqFormat::Cu8 => "cu8",
+                        IqFormat::Cs16 => "cs16",
+                    };
+                    let path = base.with_extension(ext);
+                    if let Some(dir) = path.parent() {
+                        let _ = std::fs::create_dir_all(dir);
+                    }
+                    match std::fs::File::create(&path) {
+                        Ok(f) => {
+                            let _ = std::fs::write(
+                                base.with_extension("txt"),
+                                format!(
+                                    "rate={}
+format={ext}
+",
+                                    cfg.rate
+                                ),
+                            );
+                            let _ = tx.send(AppEvent::Rec {
+                                run,
+                                path: Some(path.to_string_lossy().into_owned()),
+                            });
+                            iq_rec = Some(f);
+                        }
+                        Err(_) => {
+                            if let Ok(mut g) = knobs.record.lock() {
+                                *g = None;
+                            }
+                        }
+                    }
+                }
+                (None, true) => {
+                    iq_rec = None;
+                    let _ = tx.send(AppEvent::Rec { run, path: None });
+                }
+                _ => {}
+            }
+            if let Some(f) = &mut iq_rec {
+                if f.write_all(&bytes[..usable]).is_err() {
+                    iq_rec = None;
+                    if let Ok(mut g) = knobs.record.lock() {
+                        *g = None;
+                    }
+                    let _ = tx.send(AppEvent::Rec { run, path: None });
+                }
+            }
+        }
+
         // full-band scope (pre-tune) ~12 fps
         if last_iq.elapsed() > Duration::from_millis(80) && iq.len() >= 1024 {
             last_iq = Instant::now();
             let spec = iq_fft.iq_db(&iq[..1024]);
             if tx.send(AppEvent::Iq { run, spec }).is_err() {
                 break;
+            }
+        }
+
+        let want_shift = knobs.if_shift.load(Ordering::Relaxed);
+        if want_shift != cur_if_shift {
+            cur_if_shift = want_shift;
+            if let Detector::Ssb(ssb) = &mut det {
+                let usb = matches!(cfg.demod, Demod::Usb);
+                *ssb = SsbDemod::with_shift(48_000.0, usb, want_shift);
             }
         }
 

@@ -38,6 +38,8 @@ pub enum Ctl {
     MemSave,
     /// CTCSS tone squelch (NFM)
     Tone,
+    /// SSB passband shift
+    IfShift,
 }
 
 fn controls_for(mode: ModeId) -> Vec<Ctl> {
@@ -61,6 +63,9 @@ fn controls_for(mode: ModeId) -> Vec<Ctl> {
             if matches!(def.pipe, PipeKind::Iq(Demod::Nfm)) && def.decoder.is_none() {
                 v.push(Ctl::Tone);
             }
+            if matches!(def.pipe, PipeKind::Iq(Demod::Usb | Demod::Lsb)) && def.decoder.is_none() {
+                v.push(Ctl::IfShift);
+            }
             if def.decoder.is_some() {
                 v.push(Ctl::Mon);
             }
@@ -73,6 +78,7 @@ fn controls_for(mode: ModeId) -> Vec<Ctl> {
         }
         if mode == ModeId::Waterfall {
             v.push(Ctl::Span);
+            v.push(Ctl::Rec);
             v.push(Ctl::OpenIn);
         }
         v.push(Ctl::MemSave);
@@ -159,6 +165,7 @@ fn ctl_label(c: Ctl) -> &'static str {
         Ctl::Span => "SPAN",
         Ctl::MemSave => "MEMORY",
         Ctl::Tone => "CTCSS",
+        Ctl::IfShift => "IF SHIFT",
     }
 }
 
@@ -266,6 +273,13 @@ fn ctl_value(app: &DeckApp, mode: ModeId, c: Ctl) -> String {
                 format!("{:.1} Hz", mp.tone)
             }
         }
+        Ctl::IfShift => {
+            if mp.if_shift == 0 {
+                "center".into()
+            } else {
+                format!("{:+} Hz", mp.if_shift)
+            }
+        }
     }
 }
 
@@ -292,6 +306,7 @@ fn apply_knobs(app: &mut DeckApp, mode: ModeId) {
     k.sync_det.store(mp.det == 1, Ordering::Relaxed);
     k.tone_chz
         .store((mp.tone * 100.0).round() as u32, Ordering::Relaxed);
+    k.if_shift.store(mp.if_shift, Ordering::Relaxed);
     if r.monitorable {
         k.mute.store(!mp.monitor, Ordering::Relaxed);
     }
@@ -338,6 +353,9 @@ fn adjust(app: &mut DeckApp, mode: ModeId, c: Ctl, dir: i32) {
             Ctl::Span => {
                 ui.span = ((ui.span as i32 + dir).rem_euclid(4)) as u8;
                 return;
+            }
+            Ctl::IfShift => {
+                mp.if_shift = (mp.if_shift + dir * 50).clamp(-800, 800);
             }
             Ctl::Tone => {
                 // ladder: off + the 38 standard tones
@@ -971,7 +989,13 @@ fn draw_peaks(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
                 .stores
                 .peaks
                 .iter()
-                .map(|p| (p.hz, p.db, p.last.elapsed().as_secs_f32()))
+                .map(|p| {
+                    (
+                        p.hz,
+                        p.db + app.session.cfg.sdr.cal_db,
+                        p.last.elapsed().as_secs_f32(),
+                    )
+                })
                 .collect();
             for (i, (hz, db, age)) in peaks.iter().enumerate() {
                 ui.horizontal(|ui| {
@@ -1172,7 +1196,11 @@ fn draw_readout(
     p.text(
         resp.rect.left_top() + egui::vec2(8.0, 6.0),
         Align2::LEFT_TOP,
-        format!("MKR {}  {level:>4.0} dB", crate::freq::fmt_short(freq)),
+        format!(
+            "MKR {}  {:>4.0} dB",
+            crate::freq::fmt_short(freq),
+            level + app.session.cfg.sdr.cal_db
+        ),
         FontId::monospace(11.5),
         th.warn,
     );
@@ -1180,7 +1208,11 @@ fn draw_readout(
         p.text(
             resp.rect.right_top() + egui::vec2(-8.0, 6.0),
             Align2::RIGHT_TOP,
-            format!("PK {}  {:>4.0} dB", crate::freq::fmt_short(pk.hz), pk.db),
+            format!(
+                "PK {}  {:>4.0} dB",
+                crate::freq::fmt_short(pk.hz),
+                pk.db + app.session.cfg.sdr.cal_db
+            ),
             FontId::monospace(11.5),
             th.accent2,
         );

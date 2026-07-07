@@ -503,6 +503,7 @@ impl Session {
                 knobs
                     .tone_chz
                     .store((mp.tone * 100.0).round() as u32, Ordering::Relaxed);
+                knobs.if_shift.store(mp.if_shift, Ordering::Relaxed);
                 let monitorable = audio_out || decoder_cmd.is_some();
                 knobs
                     .mute
@@ -635,7 +636,16 @@ impl Session {
                 *g = None;
             } else {
                 let dir = crate::rec::recordings_dir(&self.cfg.audio.record_dir);
-                let name = crate::rec::recording_filename(mode_def(mode).key, r.freq_hz);
+                let name = if mode == ModeId::Waterfall {
+                    // raw IQ capture; the engine adds .cu8/.cs16 + sidecar
+                    format!(
+                        "deck_iq_{}_{}",
+                        crate::freq::fmt_mhz(r.freq_hz),
+                        chrono::Local::now().format("%Y%m%d-%H%M%S")
+                    )
+                } else {
+                    crate::rec::recording_filename(mode_def(mode).key, r.freq_hz)
+                };
                 *g = Some(dir.join(name));
             }
         }
@@ -955,6 +965,7 @@ impl Session {
             mp.squelch = bits_f32(k.squelch.load(Ordering::Relaxed));
             mp.det = u8::from(k.sync_det.load(Ordering::Relaxed));
             mp.tone = k.tone_chz.load(Ordering::Relaxed) as f32 / 100.0;
+            mp.if_shift = k.if_shift.load(Ordering::Relaxed);
             if r.monitorable {
                 mp.monitor = !k.mute.load(Ordering::Relaxed);
             }
