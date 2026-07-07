@@ -48,6 +48,36 @@ pub fn report(cfg: &Config) -> String {
     }
     let _ = writeln!(s);
 
+    // USB permission hints (bundled AppImage still needs host udev setup)
+    let have_rules = std::path::Path::new("/etc/udev/rules.d")
+        .read_dir()
+        .map(|rd| {
+            rd.flatten().any(|e| {
+                std::fs::read_to_string(e.path())
+                    .map(|c| c.contains("2832") || c.contains("rtl") || c.contains("RTL"))
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false);
+    let dvb_loaded = std::fs::read_to_string("/proc/modules")
+        .map(|m| m.contains("dvb_usb_rtl28xxu"))
+        .unwrap_or(false);
+    let _ = writeln!(
+        s,
+        "USB access\n  udev rules for SDRs: {}\n  DVB kernel driver:  {}",
+        if have_rules {
+            "present"
+        } else {
+            "NOT found — see packaging/70-deck-sdr.rules"
+        },
+        if dvb_loaded {
+            "LOADED — blacklist dvb_usb_rtl28xxu (grabs the RTL dongle)"
+        } else {
+            "ok (not holding the dongle)"
+        }
+    );
+    let _ = writeln!(s);
+
     match crate::audio::resolve_sink(cfg, &tools) {
         Some(sink) => {
             let _ = writeln!(s, "audio sink: {sink}");

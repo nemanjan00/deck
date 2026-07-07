@@ -11,6 +11,11 @@ Roadmap clearance session (2026-07-07): world-map radar layer, AIS mode,
 CTCSS tone squelch, IF shift, cal_db, IQ recording, SWEEP, band-plan
 overlay, HackRF (untested), rigctl trunk-following server. All tested where
 testable without hardware; 73 tests green.
+AppImage CI bundles all decode tools (dsd-neo/rtl_ais/dump1090 from source)
+via ci/build-appimage.sh — UNVERIFIED, needs a real Actions run to shake out
+package names + from-source build flags + lib exclusion. First-run
+debugging expected; iterate on the script, not the YAML.
+
 NEXT: cut v0.2.0. Remaining roadmap: stereo WFM, DCS, absolute dBµV cal,
 Airspy R2 (fractional rates).
 

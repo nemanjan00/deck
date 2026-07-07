@@ -1,0 +1,21 @@
+# deck — SDR USB access for unprivileged users.
+# Install once on the host (the AppImage cannot do this for you):
+#
+#   sudo cp packaging/70-deck-sdr.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#   # add yourself to the plugdev group if you aren't already:
+#   sudo usermod -aG plugdev "$USER"     # then re-login
+#
+# RTL-SDR also needs the kernel DVB-T driver blacklisted or it grabs the
+# dongle before deck can:
+#
+#   echo 'blacklist dvb_usb_rtl28xxu' | sudo tee /etc/modprobe.d/deck-rtl.conf
+#   sudo modprobe -r dvb_usb_rtl28xxu   # (or reboot)
+
+# RTL2832U (RTL-SDR)
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2832", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+SUBSYSTEM=="usb", ATTRS{idVendor}=="0bda", ATTRS{idProduct}=="2838", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+# Airspy HF+ / HF+ Discovery
+SUBSYSTEM=="usb", ATTRS{idVendor}=="03eb", ATTRS{idProduct}=="800c", MODE="0660", GROUP="plugdev", TAG+="uaccess"
+# HackRF One
+SUBSYSTEM=="usb", ATTRS{idVendor}=="1d50", ATTRS{idProduct}=="6089", MODE="0660", GROUP="plugdev", TAG+="uaccess"

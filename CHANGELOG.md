@@ -29,8 +29,13 @@
 - rigctl server for dsd-neo trunk following (-U 4532): decoder-driven
   retunes; in-band hops are instant
 - AppImage CI: rolling `continuous` prerelease + tagged releases ship
-  ready-to-run x86_64/aarch64 AppImages (built on glibc 2.35 for Pi OS
-  bookworm compatibility); `deck shot --icon` renders the app icon
+  self-contained x86_64/aarch64 AppImages that BUNDLE the decode tools
+  (rtl_sdr, multimon-ng, sox, minimodem, hackrf, airspyhf + dsd-neo,
+  rtl_ais, dump1090 from source) — one download, every mode. Built on
+  glibc 2.35 for Pi OS bookworm. Logic in ci/build-appimage.sh (runnable
+  on the Pi). `deck shot --icon` renders the app icon
+- Doctor checks SDR udev rules + the DVB kernel-module blacklist; shipped
+  packaging/70-deck-sdr.rules for host USB setup
 - Tuning aid: focusing the frequency tuner temporarily switches the viz to
   the RF band scope (drag/click to tune there too); leaves it as you left
   it when focus moves on

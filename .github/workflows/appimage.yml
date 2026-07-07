@@ -1,12 +1,17 @@
 name: AppImage
 
-# Every push to main refreshes the rolling "continuous" prerelease with
-# ready-to-run AppImages (x86_64 + aarch64) — wget one on the Pi and go.
-# Tags attach the same AppImages to the versioned release.
+# Self-contained AppImages (x86_64 + aarch64) that BUNDLE the SDR decode
+# tools — rtl_sdr, multimon-ng, sox, minimodem, hackrf, airspyhf (apt) plus
+# dsd-neo, rtl_ais, dump1090 (built from source). One download, every mode.
 #
-# Built on ubuntu-22.04 (glibc 2.35) so they run on Raspberry Pi OS
-# bookworm and anything newer. GL/GLES, libxkbcommon and an audio server
-# come from the host system (standard on Pi OS desktop).
+# Every push to main refreshes the rolling "continuous" prerelease; tags
+# attach the same AppImages to the versioned release. Built on ubuntu-22.04
+# (glibc 2.35) so they run on Raspberry Pi OS bookworm and newer. GL/GLES,
+# libxkbcommon and the audio daemon come from the host (Pi OS desktop has
+# them); RTL-SDR USB permissions are a host setup step (packaging/*.rules).
+#
+# The build logic lives in ci/build-appimage.sh so it can be run locally on
+# the Pi too, and iterated without editing YAML.
 
 on:
   push:
@@ -20,6 +25,7 @@ permissions:
 jobs:
   appimage:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - runner: ubuntu-22.04
@@ -27,6 +33,7 @@ jobs:
           - runner: ubuntu-22.04-arm
             arch: aarch64
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -34,35 +41,21 @@ jobs:
         with:
           key: appimage-${{ matrix.arch }}
 
-      - name: Build release binary
+      - name: Build deck (release)
         run: cargo build --release
 
-      - name: Assemble AppDir
-        run: |
-          mkdir -p AppDir/usr/bin
-          cp target/release/deck AppDir/usr/bin/deck
-          ./target/release/deck shot --icon AppDir/deck.png
-          cat > AppDir/deck.desktop <<'EOF'
-          [Desktop Entry]
-          Type=Application
-          Name=deck
-          Comment=Handheld ham-radio RX machine for SDR cyberdecks
-          Exec=deck
-          Icon=deck
-          Categories=HamRadio;Audio;Network;
-          Terminal=false
-          EOF
-          ln -s usr/bin/deck AppDir/AppRun
-          cp AppDir/deck.png AppDir/.DirIcon
+      - name: Build AppImage (bundles decode tools)
+        run: ci/build-appimage.sh ${{ matrix.arch }}
 
-      - name: Build AppImage
+      - name: Smoke-test the AppImage
         run: |
-          curl -fsSL -o appimagetool \
-            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${{ matrix.arch }}.AppImage"
-          chmod +x appimagetool
-          ARCH=${{ matrix.arch }} ./appimagetool --appimage-extract-and-run \
-            AppDir "deck-${{ matrix.arch }}.AppImage"
           ./deck-${{ matrix.arch }}.AppImage --appimage-extract-and-run --version
+          # confirm the tools really got bundled
+          ./deck-${{ matrix.arch }}.AppImage --appimage-extract-and-run doctor \
+            | tee doctor.txt
+          for t in rtl_sdr multimon-ng dsd-neo rtl_ais dump1090 sox minimodem; do
+            grep -q "  $t " doctor.txt || { echo "MISSING bundled tool: $t"; exit 1; }
+          done
 
       - uses: actions/upload-artifact@v4
         with:
@@ -74,10 +67,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          NOTES="Rolling build of main. Self-contained: bundles rtl_sdr, multimon-ng, sox, minimodem, hackrf, airspyhf, dsd-neo, rtl_ais, dump1090. Download the AppImage for your arch, \`chmod +x\`, run.
+
+          Host still needs: GL/GLES + libxkbcommon + pulse/pipewire (Pi OS desktop has all three), and RTL-SDR USB permissions — see packaging/70-deck-sdr.rules. \`deck doctor\` checks both."
           gh release view continuous >/dev/null 2>&1 || \
             gh release create continuous --prerelease \
-              --title "continuous (latest main)" \
-              --notes "Rolling build of main. Grab the AppImage for your arch, chmod +x, run. Needs: GL/GLES, libxkbcommon, pulse/pipewire (Pi OS desktop has all three)."
+              --title "continuous (latest main)" --notes "$NOTES"
+          gh release edit continuous --notes "$NOTES"
           gh release upload continuous "deck-${{ matrix.arch }}.AppImage" --clobber
 
       - name: Attach to tagged release

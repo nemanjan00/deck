@@ -193,7 +193,25 @@ wget https://github.com/nemanjan00/deck/releases/download/continuous/deck-aarch6
 chmod +x deck-aarch64.AppImage && ./deck-aarch64.AppImage
 ```
 
-Or a plain release binary (x86_64 / aarch64), or build it yourself:
+**The AppImage bundles the decode tools** — rtl_sdr, multimon-ng, sox,
+minimodem, hackrf, airspyhf, dsd-neo, rtl_ais, dump1090 are all inside, so
+every mode works from one download. Two things stay on the host (both on Pi
+OS desktop already, both checked by `deck doctor`):
+
+1. GL/GLES, libxkbcommon, pulse/pipewire — the display + audio stack.
+2. **RTL-SDR USB permissions** — no AppImage can grant these:
+   ```sh
+   sudo cp packaging/70-deck-sdr.rules /etc/udev/rules.d/
+   sudo udevadm control --reload-rules && sudo udevadm trigger
+   echo 'blacklist dvb_usb_rtl28xxu' | sudo tee /etc/modprobe.d/deck-rtl.conf
+   sudo modprobe -r dvb_usb_rtl28xxu    # or reboot
+   ```
+
+Or a plain release binary, build with `cargo build --release`, or build the
+AppImage yourself on the Pi with `ci/build-appimage.sh aarch64`.
+
+The install table below is only needed if you run the bare binary instead of
+the AppImage:
 
 ```sh
 cargo build --release          # needs Rust 1.79+
