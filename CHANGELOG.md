@@ -28,6 +28,9 @@
 - HackRF One support (cs8, hackrf_transfer template, author-untested)
 - rigctl server for dsd-neo trunk following (-U 4532): decoder-driven
   retunes; in-band hops are instant
+- Tuning aid: focusing the frequency tuner temporarily switches the viz to
+  the RF band scope (drag/click to tune there too); leaves it as you left
+  it when focus moves on
 
 ## 0.1.0 — 2026-07-06
 

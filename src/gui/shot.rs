@@ -297,6 +297,11 @@ fn demo_app(scene: &str, dark: bool) -> DeckApp {
         _ => {}
     }
 
+    // focus the RX control: keeps scene viz stable (tuner focus would
+    // switch the viz to the RF band — the tuning aid)
+    for ui in app.mode_ui.values_mut() {
+        ui.focus = 1;
+    }
     app.screen = match scene {
         "menu" => Screen::Menu,
         "adsb" | "adsb-radar" => Screen::Mode(ModeId::Adsb),

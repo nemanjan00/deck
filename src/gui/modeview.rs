@@ -1115,13 +1115,23 @@ fn draw_peaks(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme) {
 
 fn draw_viz(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, h: f32) {
     let view = mode_def(mode).view;
-    let viz = if view == ViewKind::Waterfall {
+    let mut viz = if view == ViewKind::Waterfall {
         3
     } else if view == ViewKind::Audio || view == ViewKind::Scanner {
         app.mode_ui(mode).viz
     } else {
         0
     };
+    // tuning aid: while the frequency tuner has focus, show the RF band
+    // instead of the audio spectrum — you tune against actual signals
+    let tuning = app
+        .mode_ui
+        .get(&mode)
+        .map(|u| u.focus == 0)
+        .unwrap_or(false);
+    if tuning && viz < 2 && !app.session.stores.band_spec.is_empty() {
+        viz = if h >= 160.0 { 3 } else { 2 };
+    }
     let running = app.running_mode() == Some(mode);
 
     // visible window of the band (span zoom) + marker position within it

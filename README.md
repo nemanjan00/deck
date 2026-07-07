@@ -211,7 +211,9 @@ Everything works with the d-pad alone; touch and letters are shortcuts.
 | **F11** | toggle fullscreen |
 | *touch* | tap a tuner digit, drag it like a wheel; drag the waterfall to tune; tap rows for detail |
 
-The frequency tuner is per-digit: select a digit, spin it. On the menu, Esc
+The frequency tuner is per-digit: select a digit, spin it — and while the
+tuner has focus, the viz becomes the RF band scope so you tune against real
+signals. On the menu, Esc
 opens the power menu (suspend / reboot / power off via logind) — deck is meant
 to *be* the device UI.
 
