@@ -1525,6 +1525,25 @@ fn draw_adsb_map(app: &mut DeckApp, ui: &mut egui::Ui, th: &Theme) {
         )
     };
 
+    // world geography (coastlines + borders), clipped to the panel
+    for seg in super::world::segments() {
+        let mut pts: Vec<Pos2> = Vec::with_capacity(seg.len());
+        let mut any_inside = false;
+        for (la, lo) in seg {
+            let pos = to_px(*la, *lo);
+            if rect.expand(60.0).contains(pos) {
+                any_inside = true;
+            }
+            pts.push(pos);
+        }
+        if any_inside {
+            p.add(egui::Shape::line(
+                pts,
+                Stroke::new(1.0, th.grid.linear_multiply(1.6)),
+            ));
+        }
+    }
+
     // range rings at nice steps
     let step = [10.0, 25.0, 50.0, 100.0, 200.0]
         .into_iter()

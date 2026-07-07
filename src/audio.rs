@@ -44,6 +44,8 @@ pub struct Knobs {
     pub mute: AtomicBool,
     /// AM detector: envelope (false) or synchronous (true)
     pub sync_det: AtomicBool,
+    /// CTCSS tone squelch in centi-Hz (0 = off); gate needs this tone
+    pub tone_chz: AtomicU32,
     /// Some(path) = record the monitor audio to this WAV; None = stop.
     pub record: Mutex<Option<std::path::PathBuf>>,
 }
@@ -68,6 +70,7 @@ impl Knobs {
             squelch: AtomicU32::new(0),
             mute: AtomicBool::new(false),
             sync_det: AtomicBool::new(false),
+            tone_chz: AtomicU32::new(0),
             record: Mutex::new(None),
         })
     }

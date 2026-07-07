@@ -11,6 +11,7 @@ pub mod widgets;
 
 pub mod raster;
 pub mod shot;
+pub mod world;
 
 use crate::config::ModePersist;
 use crate::freq::FreqInput;

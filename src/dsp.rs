@@ -803,6 +803,74 @@ impl SsbDemod {
     }
 }
 
+/// The 38 standard CTCSS tones (EIA).
+pub const CTCSS_TONES: &[f32] = &[
+    67.0, 71.9, 74.4, 77.0, 79.7, 82.5, 85.4, 88.5, 91.5, 94.8, 97.4, 100.0, 103.5, 107.2, 110.9,
+    114.8, 118.8, 123.0, 127.3, 131.8, 136.5, 141.3, 146.2, 151.4, 156.7, 162.2, 167.9, 173.8,
+    179.9, 186.2, 192.8, 203.5, 210.7, 218.1, 225.7, 233.6, 241.8, 250.3,
+];
+
+/// Power of frequency `f` in `x` (Goertzel).
+pub fn goertzel(x: &[f32], fs: f32, f: f32) -> f32 {
+    let w = 2.0 * std::f32::consts::PI * f / fs;
+    let coeff = 2.0 * w.cos();
+    let (mut s0, mut s1, mut s2) = (0.0f32, 0.0f32, 0.0f32);
+    for &v in x {
+        s0 = v + coeff * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+    }
+    (s1 * s1 + s2 * s2 - coeff * s1 * s2) / (x.len() as f32 * x.len() as f32 / 4.0)
+}
+
+/// CTCSS detector: 0.1 s windows, Goertzel bank, 2-hit debounce.
+pub struct CtcssDet {
+    fs: f32,
+    buf: Vec<f32>,
+    candidate: Option<f32>,
+    hits: u8,
+    pub detected: Option<f32>,
+}
+
+impl CtcssDet {
+    pub fn new(fs: u32) -> Self {
+        Self {
+            fs: fs as f32,
+            buf: Vec::with_capacity(8192),
+            candidate: None,
+            hits: 0,
+            detected: None,
+        }
+    }
+
+    pub fn feed(&mut self, audio: &[f32]) {
+        self.buf.extend_from_slice(audio);
+        let win = (self.fs * 0.1) as usize;
+        while self.buf.len() >= win {
+            let frame: Vec<f32> = self.buf.drain(..win).collect();
+            let total: f32 = frame.iter().map(|v| v * v).sum::<f32>() / win as f32;
+            let mut best = (0.0f32, 0.0f32);
+            for &t in CTCSS_TONES {
+                let p = goertzel(&frame, self.fs, t);
+                if p > best.1 {
+                    best = (t, p);
+                }
+            }
+            // tone must carry a meaningful share of sub-audio energy
+            let hit = (total > 1e-6 && best.1 > total * 0.05).then_some(best.0);
+            if hit == self.candidate {
+                self.hits = self.hits.saturating_add(1);
+            } else {
+                self.candidate = hit;
+                self.hits = 1;
+            }
+            if self.hits >= 2 {
+                self.detected = self.candidate;
+            }
+        }
+    }
+}
+
 /// s16le bytes → f32 samples in [-1,1)
 #[allow(dead_code)] // test-support / API symmetry with f32_to_s16
 pub fn s16_to_f32(bytes: &[u8]) -> Vec<f32> {
