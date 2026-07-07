@@ -548,14 +548,19 @@ format={ext}
             continue;
         }
 
-        // decoder feed: raw demod audio, resampled to what the decoder wants
+        // decoder feed: raw demod audio, resampled to what the decoder wants.
+        // Apply headroom so strong signals don't clip the s16 stream — clipped
+        // discriminator audio wrecks digital-voice frames (CRC errors, no
+        // sync). dsd-neo has its own AGC, so a lower level is safe.
         if let Some(dec) = &decoder {
+            const DEC_HEADROOM: f32 = 0.5;
+            let feed: Vec<f32> = audio.iter().map(|s| s * DEC_HEADROOM).collect();
             if let Some(rs) = &mut resampler {
-                let mut out = Vec::with_capacity(audio.len() / 2 + 16);
-                rs.process(&audio, &mut out);
+                let mut out = Vec::with_capacity(feed.len() / 2 + 16);
+                rs.process(&feed, &mut out);
                 dec.write(&dsp::f32_to_s16(&out));
             } else {
-                dec.write(&dsp::f32_to_s16(&audio));
+                dec.write(&dsp::f32_to_s16(&feed));
             }
         }
 

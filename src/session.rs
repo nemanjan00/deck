@@ -792,7 +792,9 @@ impl Session {
                     }
                 }
             }
-            ViewKind::Voice if src != LineSrc::Stderr => {
+            // dsd-neo prints its decode info (SRC/DST/TG/slot/CC) to STDERR,
+            // so parse both streams here (SBS is unrelated to voice).
+            ViewKind::Voice if src != LineSrc::Sbs => {
                 let fields = crate::parse::dsd::parse_line(&text);
                 if !fields.is_empty() {
                     self.stores.decoded += 1;
