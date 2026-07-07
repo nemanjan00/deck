@@ -200,7 +200,9 @@ the Simulator.
 
 **The AppImage bundles the decode tools** — rtl_sdr, multimon-ng, sox,
 minimodem, hackrf, airspyhf, dsd-neo, rtl_ais, dump1090 are all inside, so
-every mode works from one download. Two things stay on the host (both on Pi
+every mode works from one download — and the bundled `librtlsdr` is the
+rtl-sdr-blog fork, so **RTL-SDR Blog V4** works out of the box. Two things
+stay on the host (both on Pi
 OS desktop already, both checked by `deck doctor`):
 
 1. GL/GLES, libxkbcommon, pulse/pipewire — the display + audio stack.

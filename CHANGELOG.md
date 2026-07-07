@@ -34,6 +34,9 @@
   rtl_ais, dump1090 from source) — one download, every mode. Built on
   glibc 2.35 for Pi OS bookworm. Logic in ci/build-appimage.sh (runnable
   on the Pi). `deck shot --icon` renders the app icon
+- AppImage bundles librtlsdr from the rtl-sdr-blog fork (not apt's 0.6.0),
+  so RTL-SDR Blog **V4** (R828D) works out of the box — rtl_ais and dump1090
+  link it too; V3/clones unaffected
 - Doctor checks SDR udev rules + the DVB kernel-module blacklist; shipped
   packaging/70-deck-sdr.rules for host USB setup
 - Tuning aid: focusing the frequency tuner temporarily switches the viz to

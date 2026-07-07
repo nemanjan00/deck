@@ -33,12 +33,26 @@ sudo apt-get update
 # apt-shippable runtime tools themselves.
 sudo apt-get install -y --no-install-recommends \
   build-essential cmake git pkg-config curl ca-certificates \
-  librtlsdr-dev libusb-1.0-0-dev libsndfile1-dev libpulse-dev libssl-dev \
+  libusb-1.0-0-dev libsndfile1-dev libpulse-dev libssl-dev \
   libncurses-dev libairspyhf-dev \
-  rtl-sdr multimon-ng sox minimodem hackrf
+  multimon-ng sox minimodem hackrf
+# NOTE: we deliberately do NOT apt-install rtl-sdr / librtlsdr-dev. The apt
+# librtlsdr (0.6.0) predates the RTL-SDR Blog V4 (R828D tuner) and cannot
+# tune it. We build the rtl-sdr-blog fork below instead — it drives V4, V3
+# and clones, and rtl_ais + dump1090 link against it.
 # airspyhf tools live in different packages across releases; best-effort.
 sudo apt-get install -y --no-install-recommends airspyhf || \
   echo "WARN: 'airspyhf' package unavailable — airspyhf_rx may be missing"
+endgroup
+
+group "librtlsdr (rtl-sdr-blog fork — required for RTL-SDR Blog V4)"
+git clone --depth 1 https://github.com/rtlsdrblog/rtl-sdr-blog "$STAGE/rtl-sdr-blog"
+cmake -S "$STAGE/rtl-sdr-blog" -B "$STAGE/rtl-sdr-blog/build" \
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local \
+  -DINSTALL_UDEV_RULES=OFF -DDETACH_KERNEL_DRIVER=ON
+cmake --build "$STAGE/rtl-sdr-blog/build" -j"$JOBS"
+sudo cmake --install "$STAGE/rtl-sdr-blog/build"
+sudo ldconfig
 endgroup
 
 # Copy an apt-provided binary into the AppDir if present.
@@ -49,7 +63,9 @@ take() {
     echo "WARN: $1 not found (mode using it will show 'needs tools')"
   fi
 }
-group "collect apt tools"
+group "collect tools"
+# rtl_sdr/rtl_fm/rtl_test come from the blog fork in /usr/local/bin (found
+# first on PATH); the rest from apt.
 for b in rtl_sdr rtl_fm rtl_test multimon-ng sox minimodem hackrf_transfer airspyhf_rx; do
   take "$b"
 done
@@ -90,9 +106,14 @@ test -n "$found" || { echo "dsd-neo binary not found in build tree"; \
 cp -v "$found" "$APPDIR/usr/bin/dsd-neo"
 endgroup
 
+# both link librtlsdr — point them at the blog fork in /usr/local so they
+# inherit V4 support (pkg-config for dump1090; -I/-L for rtl-ais).
+export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
+
 group "rtl-ais (source)"
 git clone --depth 1 https://github.com/dgiardini/rtl-ais "$STAGE/rtl-ais"
-make -C "$STAGE/rtl-ais" -j"$JOBS"
+make -C "$STAGE/rtl-ais" -j"$JOBS" \
+  CFLAGS="-O2 -I/usr/local/include" LDFLAGS="-L/usr/local/lib"
 cp -v "$STAGE/rtl-ais/rtl_ais" "$APPDIR/usr/bin/"
 endgroup
 
