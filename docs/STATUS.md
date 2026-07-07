@@ -20,8 +20,9 @@ built stdin-only (-DBUILD_TESTING=OFF + SoapySDR/RTL/UI off); linuxdeploy
 leaves AppRun a symlink into usr/bin (rm before writing or it clobbers deck).
 NOT YET run on real hardware / GL — see FIELD_TESTING.md.
 
-NEXT: cut v0.2.0 (Unreleased changelog is complete). Remaining roadmap:
+v0.2.0 tagged 2026-07-07 (CHANGELOG has the full list). Remaining roadmap:
 stereo WFM, DCS, absolute dBµV cal, Airspy R2 (fractional rates).
+Still unverified on real hardware/GL — see FIELD_TESTING.md.
 
 ## Done (v0.1.0)
 

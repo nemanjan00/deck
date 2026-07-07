@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 — 2026-07-07
 
 - Waterfall signal browser: automatic peak detection (noise-floor tracked,
   DC-spike excluded, persistence-smoothed); tap/OK a peak to tune, RIGHT to
