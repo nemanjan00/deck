@@ -20,9 +20,26 @@ built stdin-only (-DBUILD_TESTING=OFF + SoapySDR/RTL/UI off); linuxdeploy
 leaves AppRun a symlink into usr/bin (rm before writing or it clobbers deck).
 NOT YET run on real hardware / GL — see FIELD_TESTING.md.
 
-v0.2.0 tagged 2026-07-07 (CHANGELOG has the full list). Remaining roadmap:
-stereo WFM, DCS, absolute dBµV cal, Airspy R2 (fractional rates).
-Still unverified on real hardware/GL — see FIELD_TESTING.md.
+v0.2.0 tagged 2026-07-07 (CHANGELOG has the full list).
+
+HARDWARE-VERIFIED (2026-07-07, user's Airspy HF+ on a Pi): the GUI runs on
+real GL, and the full digital-voice chain WORKS end to end — D-STAR decodes to
+intelligible audio with a populated call card. The saga of fixes it took
+(each a real link): Airspy IQ is float32 not int16; dsd-neo needs `-s 48000`
+on stdin; call info is on dsd-neo STDERR; decoder feed needs deep headroom
+(0.25) or it clips; DV must always play (not gated on stale `monitor`);
+dsd-neo stdout voice is 8 kHz → resample to 48 kHz. This validates the whole
+decoded-audio architecture (recordings player, autorecord, RIFF metadata all
+ride on it). RTL V4 path (rtl-sdr-blog librtlsdr) still to be confirmed on the
+user's V4 dongle.
+
+Post-0.2.0 (committed, unreleased → v0.3.0 candidate): decoded-voice audio
+ownership, recordings explorer + in-app player (scrub/±5s), autorecord, RIFF
+metadata, scope filter overlay + SQ line + focus-to-RF, AIS via AIS-catcher
+(device-generic), Voice viz = RF scope, scope drag-direction fix.
+
+Remaining roadmap: FT8 (windowed 15s decode — new pattern), stereo WFM, DCS,
+absolute dBµV cal, Airspy R2 (fractional rates).
 
 ## Done (v0.1.0)
 
