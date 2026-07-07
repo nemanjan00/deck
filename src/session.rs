@@ -517,12 +517,13 @@ impl Session {
                     .store((mp.tone * 100.0).round() as u32, Ordering::Relaxed);
                 knobs.if_shift.store(mp.if_shift, Ordering::Relaxed);
                 knobs.autorecord.store(mp.autorecord, Ordering::Relaxed);
-                let monitorable = audio_out || decoder_cmd.is_some();
-                // Voice decoders emit decoded audio (deck plays it): play by
-                // default. Analog plays when audio_out; other decoders (pager/
-                // RTTY) stay muted unless the user enables MONITOR.
+                // Voice decoders emit decoded audio: ALWAYS play it (loudness
+                // is the system mixer's job) — never gate on the stale
+                // `monitor` flag. MONITOR only applies to non-voice decoders
+                // (pager/RTTY discriminator monitoring).
+                let monitorable = audio_out || (decoder_cmd.is_some() && !decoder_audio);
                 let play = if decoder_audio {
-                    mp.monitor
+                    true
                 } else {
                     audio_out || mp.monitor
                 };

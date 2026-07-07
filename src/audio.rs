@@ -657,7 +657,10 @@ format={ext}
         // discriminator audio wrecks digital-voice frames (CRC errors, no
         // sync). dsd-neo has its own AGC, so a lower level is safe.
         if let Some(dec) = &decoder {
-            const DEC_HEADROOM: f32 = 0.5;
+            // The FM discriminator's peak output is ~fs/(2·dev) (≈6.0 full
+            // scale), so digital signals with sharp transitions clip hard
+            // without deep headroom. dsd-neo's AGC recovers the level.
+            const DEC_HEADROOM: f32 = 0.25;
             let feed: Vec<f32> = audio.iter().map(|s| s * DEC_HEADROOM).collect();
             if let Some(rs) = &mut resampler {
                 let mut out = Vec::with_capacity(feed.len() / 2 + 16);

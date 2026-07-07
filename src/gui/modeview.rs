@@ -70,7 +70,9 @@ fn controls_for(mode: ModeId) -> Vec<Ctl> {
             if matches!(def.pipe, PipeKind::Iq(Demod::Usb | Demod::Lsb)) && def.decoder.is_none() {
                 v.push(Ctl::IfShift);
             }
-            if def.decoder.is_some() {
+            // MONITOR = hear the discriminator; only meaningful for non-voice
+            // decoders (pager/RTTY). Voice decoders always play decoded audio.
+            if def.decoder.is_some() && def.view != ViewKind::Voice {
                 v.push(Ctl::Mon);
             }
             v.push(Ctl::Rec);
