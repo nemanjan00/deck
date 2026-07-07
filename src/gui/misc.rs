@@ -314,6 +314,30 @@ pub fn draw_recordings(app: &mut DeckApp, ctx: &egui::Context) {
                     }
                 });
         });
+    // embedded metadata of the selected recording
+    if let Some(c) = app
+        .recordings
+        .entries
+        .get(app.recordings.sel)
+        .and_then(|e| e.comment.as_deref())
+    {
+        let th = app.th.clone();
+        egui::TopBottomPanel::bottom("recmeta")
+            .frame(
+                egui::Frame::none()
+                    .fill(th.panel)
+                    .inner_margin(8.0)
+                    .stroke(Stroke::new(1.0, th.outline)),
+            )
+            .show(ctx, |ui| {
+                ui.label(RichText::new("METADATA").size(10.0).color(th.text_faint));
+                ui.label(
+                    RichText::new(c)
+                        .font(FontId::monospace(12.0))
+                        .color(th.accent),
+                );
+            });
+    }
     if let Some(i) = play {
         app.recordings.sel = i;
         toggle_play(app, i);

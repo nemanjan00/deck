@@ -15,6 +15,8 @@ pub struct RecEntry {
     pub secs: f32,
     pub modified: SystemTime,
     pub is_wav: bool,
+    /// embedded RIFF INFO comment (mode/freq/callsign/TG), if any
+    pub comment: Option<String>,
 }
 
 /// Duration of a mono WAV in seconds from its header (0 on any problem).
@@ -34,6 +36,41 @@ fn wav_seconds(path: &Path) -> f32 {
     } else {
         data as f32 / (rate as f32 * 2.0)
     }
+}
+
+/// Read the RIFF INFO/ICMT comment from a WAV (walks chunks past `data`).
+fn wav_comment(path: &Path) -> Option<String> {
+    let data = std::fs::read(path).ok()?;
+    if data.len() < 12 || &data[..4] != b"RIFF" || &data[8..12] != b"WAVE" {
+        return None;
+    }
+    let mut i = 12;
+    while i + 8 <= data.len() {
+        let id = &data[i..i + 4];
+        let sz = u32::from_le_bytes([data[i + 4], data[i + 5], data[i + 6], data[i + 7]]) as usize;
+        let body = i + 8;
+        if id == b"LIST" && body + 4 <= data.len() && &data[body..body + 4] == b"INFO" {
+            // scan sub-chunks for ICMT
+            let mut j = body + 4;
+            let end = (body + sz).min(data.len());
+            while j + 8 <= end {
+                let sid = &data[j..j + 4];
+                let ssz =
+                    u32::from_le_bytes([data[j + 4], data[j + 5], data[j + 6], data[j + 7]]) as usize;
+                if sid == b"ICMT" {
+                    let t = &data[j + 8..(j + 8 + ssz).min(data.len())];
+                    let s = String::from_utf8_lossy(t)
+                        .trim_end_matches('\0')
+                        .trim()
+                        .to_string();
+                    return (!s.is_empty()).then_some(s);
+                }
+                j += 8 + ssz + (ssz & 1);
+            }
+        }
+        i = body + sz + (sz & 1);
+    }
+    None
 }
 
 /// List recordings (newest first). Covers .wav and the raw IQ extensions.
@@ -65,6 +102,7 @@ pub fn list_recordings(dir: &Path) -> Vec<RecEntry> {
             secs: if is_wav { wav_seconds(&path) } else { 0.0 },
             bytes: md.len(),
             modified: md.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+            comment: if is_wav { wav_comment(&path) } else { None },
             is_wav,
             path,
         });
@@ -233,6 +271,11 @@ mod tests {
         assert_eq!(data, 2000);
         let rate = u32::from_le_bytes(bytes[24..28].try_into().unwrap());
         assert_eq!(rate, 48_000);
+        // embedded RIFF INFO comment reads back
+        assert_eq!(
+            wav_comment(&path).as_deref(),
+            Some("deck test src=YT7OP tg=91")
+        );
         let _ = std::fs::remove_file(path);
     }
 }

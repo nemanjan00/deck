@@ -1122,14 +1122,14 @@ fn draw_viz(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, h: f
     } else {
         0
     };
-    // tuning aid: while the frequency tuner has focus, show the RF band
-    // instead of the audio spectrum — you tune against actual signals
-    let tuning = app
-        .mode_ui
-        .get(&mode)
-        .map(|u| u.focus == 0)
-        .unwrap_or(false);
-    if tuning && viz < 2 && !app.session.stores.band_spec.is_empty() {
+    // tuning aid: while the frequency tuner OR the squelch control has focus,
+    // show the RF band instead of the audio spectrum — you tune / set squelch
+    // against actual signals (the SQ line is drawn on the band scope).
+    let focus = app.mode_ui.get(&mode).map(|u| u.focus).unwrap_or(0);
+    let ctls = controls_for(mode);
+    let focused_ctl = (focus >= 1 && focus <= ctls.len()).then(|| ctls[focus - 1]);
+    let want_rf = focus == 0 || focused_ctl == Some(Ctl::Sql);
+    if want_rf && viz < 2 && !app.session.stores.band_spec.is_empty() {
         viz = if h >= 160.0 { 3 } else { 2 };
     }
     let running = app.running_mode() == Some(mode);
@@ -1311,6 +1311,22 @@ fn draw_readout(
                 );
             }
         }
+    }
+    // squelch threshold line (band scope is -80..0 dB; squelch is audio RMS,
+    // shown as a reference level to set against the noise floor / signals)
+    let sq = u.map(|u| u.mp.squelch).unwrap_or(0.0);
+    if sq > 0.0 {
+        let db = 20.0 * sq.max(1e-5).log10();
+        let t = ((db + 80.0) / 80.0).clamp(0.0, 1.0);
+        let y = resp.rect.max.y - t * resp.rect.height();
+        p.hline(resp.rect.x_range(), y, Stroke::new(1.0, th.warn));
+        p.text(
+            egui::pos2(resp.rect.max.x - 4.0, y - 2.0),
+            Align2::RIGHT_BOTTOM,
+            "SQ",
+            FontId::proportional(9.5),
+            th.warn,
+        );
     }
     // band-plan strips along the bottom edge of the scope
     let low = w.low_hz.max(0.0) as u64;
