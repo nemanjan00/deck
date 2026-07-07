@@ -326,14 +326,29 @@ fn pump_decoded(
     tx: Sender<AppEvent>,
     run: u64,
 ) {
+    // dsd-neo emits decoded voice at the vocoder's native 8 kHz on stdout;
+    // deck's sink runs at 48 kHz, so resample up or it plays 6× fast (the
+    // "strange noises, no voice" symptom). Recording is the resampled 48 kHz.
+    const SRC_RATE: u32 = 8_000;
     let mut buf = vec![0u8; 8192];
+    let mut leftover: Vec<u8> = Vec::new();
+    let mut resampler = crate::dsp::Resampler::new(SRC_RATE, 48_000);
     let mut recorder: Option<crate::rec::WavWriter> = None;
     loop {
         let n = match stdout.read(&mut buf) {
             Ok(0) | Err(_) => break,
             Ok(n) => n,
         };
-        let pcm = &buf[..n];
+        // keep s16 alignment across reads, then resample 8k → 48k
+        let mut bytes = std::mem::take(&mut leftover);
+        bytes.extend_from_slice(&buf[..n]);
+        let usable = bytes.len() - bytes.len() % 2;
+        leftover = bytes[usable..].to_vec();
+        let src = dsp::s16_to_f32(&bytes[..usable]);
+        let mut up = Vec::with_capacity(src.len() * 6 + 8);
+        resampler.process(&src, &mut up);
+        let pcm = dsp::f32_to_s16(&up);
+        let pcm = pcm.as_slice();
         if let Some(snk) = &sink {
             if !knobs.mute.load(Ordering::Relaxed) {
                 snk.write(pcm);
