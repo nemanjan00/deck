@@ -33,7 +33,7 @@ sudo apt-get update
 # apt-shippable runtime tools themselves.
 sudo apt-get install -y --no-install-recommends \
   build-essential cmake git pkg-config curl ca-certificates \
-  librtlsdr-dev libusb-1.0-0-dev libsndfile1-dev libpulse-dev \
+  librtlsdr-dev libusb-1.0-0-dev libsndfile1-dev libpulse-dev libssl-dev \
   libncurses-dev libairspyhf-dev \
   rtl-sdr multimon-ng sox minimodem hackrf
 # airspyhf tools live in different packages across releases; best-effort.
@@ -55,18 +55,26 @@ for b in rtl_sdr rtl_fm rtl_test multimon-ng sox minimodem hackrf_transfer airsp
 done
 endgroup
 
-group "mbe-neo (source) — dsd-neo's AMBE vocoder dependency"
-git clone --depth 1 https://github.com/arancormonk/mbe-neo "$STAGE/mbe-neo"
-cmake -S "$STAGE/mbe-neo" -B "$STAGE/mbe-neo/build" -DCMAKE_BUILD_TYPE=Release
-cmake --build "$STAGE/mbe-neo/build" -j"$JOBS"
-sudo cmake --install "$STAGE/mbe-neo/build"
+group "mbelib-neo (source) — dsd-neo's AMBE/IMBE vocoder dependency"
+# repo is "mbelib-neo"; the CMake package it provides is named "mbe-neo".
+# dsd-neo needs the 2.x soft-decision API (1.x is not supported).
+git clone --depth 1 https://github.com/arancormonk/mbelib-neo "$STAGE/mbelib-neo"
+cmake -S "$STAGE/mbelib-neo" -B "$STAGE/mbelib-neo/build" -DCMAKE_BUILD_TYPE=Release
+cmake --build "$STAGE/mbelib-neo/build" -j"$JOBS"
+sudo cmake --install "$STAGE/mbelib-neo/build"
 sudo ldconfig
 endgroup
 
 group "dsd-neo (source)"
+# deck feeds dsd-neo audio on stdin (-i -) and takes -o pulse, so it needs
+# NO radio backend and no terminal UI of its own. Disabling SoapySDR (ON by
+# default, and not installed), RTL-SDR and the ncurses UI strips it to its
+# REQUIRED deps only: mbe-neo + libsndfile + OpenSSL + PulseAudio.
 git clone --depth 1 https://github.com/arancormonk/dsd-neo "$STAGE/dsd-neo"
 cmake -S "$STAGE/dsd-neo" -B "$STAGE/dsd-neo/build" \
-  -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local
+  -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local \
+  -DDSD_ENABLE_SOAPYSDR=OFF -DDSD_ENABLE_RTLSDR=OFF \
+  -DDSD_ENABLE_TERMINAL_UI=OFF
 cmake --build "$STAGE/dsd-neo/build" -j"$JOBS"
 # binary name has varied (dsd-neo / dsd); grab whatever built.
 found="$(find "$STAGE/dsd-neo/build" -maxdepth 3 -type f -executable \
