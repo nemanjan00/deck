@@ -1237,6 +1237,21 @@ fn windowed_spec(app: &DeckApp, win: Option<BandWindow>) -> Vec<f32> {
     }
 }
 
+/// Receive passband edges in Hz relative to the tuned freq, matching the
+/// channel filter / SSB passband in the RX engine (audio.rs). None = no
+/// channel filter to show (raw waterfall / external pipeline).
+fn filter_edges(mode: ModeId, if_shift: i32) -> Option<(f64, f64)> {
+    let s = f64::from(if_shift);
+    match mode_def(mode).pipe {
+        PipeKind::Iq(Demod::Nfm) => Some((-8_000.0, 8_000.0)),
+        PipeKind::Iq(Demod::Am) => Some((-6_000.0, 6_000.0)),
+        PipeKind::Iq(Demod::Wfm) => Some((-100_000.0, 100_000.0)),
+        PipeKind::Iq(Demod::Usb) => Some((250.0 + s, 3_050.0 + s)),
+        PipeKind::Iq(Demod::Lsb) => Some((-3_050.0 - s, -250.0 - s)),
+        _ => None,
+    }
+}
+
 /// KC908-style measurement overlay: marker frequency + level, strongest peak.
 fn draw_readout(
     app: &DeckApp,
@@ -1260,6 +1275,43 @@ fn draw_readout(
         .map(|s| s.iter().fold(f32::MIN, |a, &b| a.max(b)))
         .unwrap_or(-80.0);
     let p = ui.painter();
+    // receive passband (filter) overlay — the shaded region is exactly what
+    // deck demodulates; offset to the correct sideband for USB/LSB.
+    let u = app.mode_ui.get(&mode);
+    let if_shift = u.map(|u| u.mp.if_shift).unwrap_or(0);
+    let bw = u.and_then(|u| (u.mp.bw_hz > 0).then_some(u.mp.bw_hz));
+    if let Some((mut lo, mut hi)) = filter_edges(mode, if_shift) {
+        // a user bandwidth override rescales the default passband
+        if let Some(bw) = bw {
+            let (clo, chi) = filter_edges(mode, if_shift).unwrap();
+            let center = (clo + chi) / 2.0;
+            let scale = f64::from(bw) / (chi - clo);
+            lo = center + (clo - center) * scale;
+            hi = center + (chi - center) * scale;
+        }
+        let fx = |off: f64| -> f32 {
+            resp.rect.min.x
+                + (((freq as f64 + off - w.low_hz) / w.span_hz) as f32).clamp(0.0, 1.0)
+                    * resp.rect.width()
+        };
+        let (x0, x1) = (fx(lo), fx(hi));
+        if x1 > x0 {
+            p.rect_filled(
+                egui::Rect::from_min_max(
+                    egui::pos2(x0, resp.rect.min.y),
+                    egui::pos2(x1, resp.rect.max.y),
+                ),
+                0.0,
+                th.accent.linear_multiply(0.13),
+            );
+            for x in [x0, x1] {
+                p.line_segment(
+                    [egui::pos2(x, resp.rect.min.y), egui::pos2(x, resp.rect.max.y)],
+                    Stroke::new(1.0, th.accent.linear_multiply(0.7)),
+                );
+            }
+        }
+    }
     // band-plan strips along the bottom edge of the scope
     let low = w.low_hz.max(0.0) as u64;
     let high = (w.low_hz + w.span_hz).max(0.0) as u64;

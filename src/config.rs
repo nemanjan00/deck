@@ -205,6 +205,12 @@ pub struct ModePersist {
     pub tone: f32,
     /// SSB passband (IF) shift in Hz
     pub if_shift: i32,
+    /// receive channel bandwidth in Hz (0 = mode default)
+    pub bw_hz: u32,
+    /// 3-band audio EQ gains in dB (low/mid/high), 0 = flat
+    pub eq_low: f32,
+    pub eq_mid: f32,
+    pub eq_high: f32,
     /// monitor audio toggle for decoder modes
     pub monitor: bool,
 }
