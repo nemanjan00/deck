@@ -1,6 +1,6 @@
 [package]
 name = "deck"
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 rust-version = "1.79"
 description = "Handheld ham-radio RX machine for SDR cyberdecks: a fullscreen touch GUI that reads IQ from RTL-SDR/Airspy HF+, demodulates NFM/WFM/AM/SSB internally, and drives dsd-neo, multimon-ng, dump1090 & friends — with scanner, waterfall, spectrum, NR/NB/notch and a built-in signal simulator."

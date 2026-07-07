@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 — 2026-07-07
+
+First hardware-verified digital voice (D-STAR decoded live on an Airspy HF+).
 
 - Recordings: real in-app player (play/pause, ±5 s, scrubbable progress bar),
   replacing fire-and-forget paplay
