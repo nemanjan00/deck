@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- Digital voice: deck now owns the decoded audio (dsd-neo `-o -`) — plays it
+  through deck's sink, records the actual voice, enables postprocessing;
+  parses call info from stderr; `-s 48000` fixes symbol timing
+- Airspy HF+ IQ is float32 (was mis-decoded as int16 → mirror/no-audio); RTL
+  path fixes: rtl-sdr-blog librtlsdr for **V4**
+- Recordings explorer (Tools → REC LIST): browse/play/delete, shows embedded
+  metadata; recordings carry RIFF INFO tags (mode/freq/callsign/TG)
+- Autorecord: hands-free recording on signal/call (per-call for voice,
+  squelch-gated for analog)
+- Scope: receive-passband (filter) overlay + squelch line; focusing the
+  freq tuner or SQUELCH switches the viz to the RF band scope
+- Fix: scope drag direction (VFO follows the cursor)
+
 ## 0.2.0 — 2026-07-07
 
 - Waterfall signal browser: automatic peak detection (noise-floor tracked,
