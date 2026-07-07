@@ -862,7 +862,42 @@ impl Session {
             }
         }
 
+        self.update_rec_meta();
         self.tick_scanner(now);
+    }
+
+    /// Keep the recordings' embedded metadata (RIFF INFO comment) current:
+    /// mode, frequency, timestamp, and live digital-voice call fields.
+    fn update_rec_meta(&self) {
+        let Some(r) = &self.running else { return };
+        let def = mode_def(r.mode);
+        let mut m = format!(
+            "deck {} {} {}",
+            def.label,
+            crate::freq::fmt_short(r.freq_hz),
+            chrono::Local::now().format("%Y-%m-%d %H:%M")
+        );
+        if let Some(c) = &self.stores.call {
+            let f = &c.fields;
+            if let Some(v) = &f.src {
+                m.push_str(&format!(" SRC={v}"));
+            }
+            if let Some(v) = &f.dst {
+                m.push_str(&format!(" DST={v}"));
+            }
+            if let Some(v) = &f.tg {
+                m.push_str(&format!(" TG={v}"));
+            }
+            if let Some(v) = f.slot {
+                m.push_str(&format!(" SLOT={v}"));
+            }
+            if let Some(v) = &f.cc {
+                m.push_str(&format!(" CC={v}"));
+            }
+        }
+        if let Ok(mut g) = r.knobs.rec_meta.lock() {
+            *g = m;
+        }
     }
 
     fn tick_scanner(&mut self, now: Instant) {

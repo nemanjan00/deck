@@ -51,6 +51,8 @@ pub struct Knobs {
     pub if_shift: AtomicI32,
     /// Some(path) = record the monitor audio to this WAV; None = stop.
     pub record: Mutex<Option<std::path::PathBuf>>,
+    /// RIFF INFO comment embedded in recordings (callsign/TG/mode/freq)
+    pub rec_meta: Mutex<String>,
 }
 
 pub fn f32_bits(v: f32) -> u32 {
@@ -76,6 +78,7 @@ impl Knobs {
             tone_chz: AtomicU32::new(0),
             if_shift: AtomicI32::new(0),
             record: Mutex::new(None),
+            rec_meta: Mutex::new(String::new()),
         })
     }
 }
@@ -340,7 +343,8 @@ fn pump_decoded(mut stdout: impl Read, sink: Option<StdinSink>, knobs: Arc<Knobs
             }
             (None, true) => {
                 if let Some(w) = recorder.take() {
-                    let _ = w.finalize();
+                    let meta = knobs.rec_meta.lock().ok().map(|m| m.clone()).unwrap_or_default();
+                    let _ = w.finalize(Some(&meta));
                 }
                 let _ = tx.send(AppEvent::Rec { run, path: None });
             }
@@ -353,7 +357,8 @@ fn pump_decoded(mut stdout: impl Read, sink: Option<StdinSink>, knobs: Arc<Knobs
         }
     }
     if let Some(w) = recorder.take() {
-        let _ = w.finalize();
+        let meta = knobs.rec_meta.lock().ok().map(|m| m.clone()).unwrap_or_default();
+        let _ = w.finalize(Some(&meta));
         let _ = tx.send(AppEvent::Rec { run, path: None });
     }
 }
@@ -735,7 +740,8 @@ format={ext}
             },
             (None, true) => {
                 if let Some(w) = recorder.take() {
-                    let _ = w.finalize();
+                    let meta = knobs.rec_meta.lock().ok().map(|m| m.clone()).unwrap_or_default();
+                    let _ = w.finalize(Some(&meta));
                 }
                 let _ = tx.send(AppEvent::Rec { run, path: None });
             }
@@ -774,7 +780,8 @@ format={ext}
         }
     }
     if let Some(w) = recorder.take() {
-        let _ = w.finalize();
+        let meta = knobs.rec_meta.lock().ok().map(|m| m.clone()).unwrap_or_default();
+        let _ = w.finalize(Some(&meta));
         let _ = tx.send(AppEvent::Rec { run, path: None });
     }
 }

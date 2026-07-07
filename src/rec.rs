@@ -69,7 +69,7 @@ pub fn list_recordings(dir: &Path) -> Vec<RecEntry> {
             path,
         });
     }
-    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    out.sort_by_key(|e| std::cmp::Reverse(e.modified));
     out
 }
 
@@ -131,9 +131,32 @@ impl WavWriter {
         self.data_bytes as f32 / (rate as f32 * 2.0)
     }
 
-    pub fn finalize(mut self) -> std::io::Result<PathBuf> {
+    /// Finalize, optionally embedding a RIFF INFO comment (ICMT) — used to
+    /// tag digital-voice recordings with callsign/TG/mode/freq. Readable by
+    /// ffprobe, mediainfo, exiftool, etc.
+    pub fn finalize(mut self, comment: Option<&str>) -> std::io::Result<PathBuf> {
+        let mut extra: u32 = 0;
+        if let Some(c) = comment.filter(|c| !c.is_empty()) {
+            self.f.seek(SeekFrom::End(0))?;
+            let mut text = c.as_bytes().to_vec();
+            text.push(0); // NUL-terminate
+            if text.len() % 2 == 1 {
+                text.push(0); // pad to even
+            }
+            let icmt_len = text.len() as u32;
+            let list_size = 4 + 8 + icmt_len; // "INFO" + ("ICMT"+len) + text
+            let mut buf = Vec::with_capacity(8 + list_size as usize);
+            buf.extend_from_slice(b"LIST");
+            buf.extend_from_slice(&list_size.to_le_bytes());
+            buf.extend_from_slice(b"INFO");
+            buf.extend_from_slice(b"ICMT");
+            buf.extend_from_slice(&icmt_len.to_le_bytes());
+            buf.extend_from_slice(&text);
+            self.f.write_all(&buf)?;
+            extra = 8 + list_size;
+        }
         self.f.seek(SeekFrom::Start(4))?;
-        self.f.write_all(&(36 + self.data_bytes).to_le_bytes())?;
+        self.f.write_all(&(36 + self.data_bytes + extra).to_le_bytes())?;
         self.f.seek(SeekFrom::Start(40))?;
         self.f.write_all(&self.data_bytes.to_le_bytes())?;
         self.f.flush()?;
@@ -180,7 +203,7 @@ mod tests {
         std::fs::create_dir_all(&tmp).unwrap();
         let mut w = WavWriter::create(&tmp.join("a.wav"), 48_000).unwrap();
         w.write_s16(&vec![0u8; 48_000 * 2]).unwrap(); // 1.0 s
-        w.finalize().unwrap();
+        w.finalize(None).unwrap();
         std::fs::write(tmp.join("b.cu8"), vec![0u8; 4096]).unwrap();
         std::fs::write(tmp.join("skip.txt"), b"x").unwrap();
         let rows = list_recordings(&tmp);
@@ -200,7 +223,7 @@ mod tests {
         let samples: Vec<u8> = (0..1000i16).flat_map(|v| v.to_le_bytes()).collect();
         w.write_s16(&samples).unwrap();
         assert!((w.seconds(48_000) - 1000.0 / 48_000.0).abs() < 1e-6);
-        let path = w.finalize().unwrap();
+        let path = w.finalize(Some("deck test src=YT7OP tg=91")).unwrap();
         let bytes = std::fs::read(&path).unwrap();
         assert_eq!(&bytes[..4], b"RIFF");
         assert_eq!(&bytes[8..12], b"WAVE");
