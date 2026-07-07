@@ -1139,6 +1139,8 @@ fn draw_viz(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Theme, h: f
         3
     } else if view == ViewKind::Audio || view == ViewKind::Scanner {
         app.mode_ui(mode).viz
+    } else if view == ViewKind::Voice {
+        2 // RF band scope — the discriminator "audio" spectrum is just noise
     } else {
         0
     };
