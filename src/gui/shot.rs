@@ -258,6 +258,21 @@ fn demo_app(scene: &str, dark: bool) -> DeckApp {
             }
             app.session.stores.sbs_note = Some("SBS connected (127.0.0.1:30003)".into());
         }
+        "ais" => {
+            app.mode_ui(ModeId::Ais).viz = 1;
+            fake_running(&mut app, ModeId::Ais, 161_975_000);
+            let mut fleet = crate::sim::ais::BoatFleet::new(11, 7, 44.6, 14.2);
+            let mut parser = crate::parse::ais::AisParser::new();
+            let t0 = Instant::now();
+            for _ in 0..90 {
+                for line in fleet.step(20.0) {
+                    if let Some(m) = parser.push(&line) {
+                        app.session.stores.aircraft.push_ais(&m, t0);
+                    }
+                }
+            }
+            app.session.stores.decoded = 200;
+        }
         "scanner" => {
             let ui = app.mode_ui(ModeId::Scanner);
             ui.mp.squelch = 0.045;
@@ -285,6 +300,7 @@ fn demo_app(scene: &str, dark: bool) -> DeckApp {
     app.screen = match scene {
         "menu" => Screen::Menu,
         "adsb" | "adsb-radar" => Screen::Mode(ModeId::Adsb),
+        "ais" => Screen::Mode(ModeId::Ais),
         "nfm" => Screen::Mode(ModeId::Nfm),
         "waterfall" => Screen::Mode(ModeId::Waterfall),
         "dmr" => Screen::Mode(ModeId::Dmr),
@@ -318,6 +334,7 @@ pub fn default_shots() -> Vec<ShotSpec> {
         "aprs",
         "adsb",
         "adsb-radar",
+        "ais",
         "scanner",
     ] {
         v.push(ShotSpec {

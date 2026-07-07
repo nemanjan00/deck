@@ -53,9 +53,9 @@ drag the waterfall to retune, 44 px+ targets throughout.
 |---|---|
 | ![nfm light](docs/shots/nfm-light.png) | ![menu square](docs/shots/menu-sq.png) |
 
-| ADS-B table view |
-|---|
-| ![adsb table](docs/shots/adsb.png) |
+| ADS-B table view | AIS ships on the radar |
+|---|---|
+| ![adsb table](docs/shots/adsb.png) | ![ais](docs/shots/ais.png) |
 
 </details>
 
@@ -97,11 +97,12 @@ released first, so nothing ever fights over the radio.
 | **Data** | POCSAG · APRS | `multimon-ng` | typed message tables with detail popups |
 | | RTTY | `sox` + `minimodem` | 45.45 Bd Baudot text feed |
 | | ADS-B | `dump1090` / `readsb` / `rtl1090` | offline radar map + aircraft table via SBS :30003 |
+| | AIS | `rtl_ais` | ships on the same radar/table (161.975/162.025 MHz) |
 | **Tools** | Scanner | — | dwell/hold/lockout, priority channel, hit counters |
 | | Waterfall | — | full-band scope, drag-to-tune, click-to-jump |
 
-**Devices:** RTL-SDR (24–1766 MHz) and Airspy HF+ (9 kHz–31 MHz, 60–260 MHz)
-are autodetected over sysfs — no udev fights, no libusb linkage. A
+**Devices:** RTL-SDR (24–1766 MHz), Airspy HF+ (9 kHz–31 MHz, 60–260 MHz)
+and HackRF One (1 MHz–6 GHz, cs8) are autodetected over sysfs — no udev fights, no libusb linkage. A
 **Simulator** device is always present (see below). Range checks are
 per-device: deck won't let you ask an HF+ for 1090 MHz.
 
@@ -115,18 +116,32 @@ All on the monitor path, all adjustable live, all persisted per mode:
 - **HP/LP filters** — biquad cascades, 24 dB/oct, cutoff ladders
 - **Squelch** — RMS with hysteresis, S-meter with threshold marker
 - **AM sync detector** — PLL-based SAM for fading shortwave
+- **CTCSS tone squelch** — 38-tone detector; the live tone shows as a chip,
+  pick one and the gate requires it (DCS not implemented)
+- **IF shift** — ±800 Hz passband tuning on SSB, pitch-preserving
 
 **Waterfall as launchpad:** deck auto-detects **peaks** in the band (noise-floor
 tracking, DC-spike filtered) and lists them under the fall — tap one to tune,
 or hand it straight off to any mode (`OPEN IN` / double-tap) and RX starts
 there. SPAN zooms 2.4 MHz → 300 kHz around the marker, with KC908-style
-MKR/PK level readouts. Any frequency can be saved as a **memory channel**
+MKR/PK level readouts (calibratable via `[sdr] cal_db`), a **band-plan
+overlay** (ham/broadcast/air/marine/ISM strips), **SWEEP**
+(search-between-limits: marches across `[sweep] from..to` and fills the peak
+browser with everything it finds), and REC captures **raw IQ**
+(.cu8/.cs16 + sidecar). Any frequency can be saved as a **memory channel**
 (starred in the preset picker, persisted) — including straight from the peak
 list (`mem+`), KC908 search-and-store style.
 
-**ADS-B radar:** a fully offline radar view (no map tiles) — range rings
-around your `[adsb] lat/lon` home (or auto-centered on traffic),
-track-rotated aircraft arrows colored by altitude, position trails. The
+**ADS-B & AIS radar:** a fully offline radar view with real geography —
+Natural Earth coastlines/borders are compiled in (68 KB, public domain) —
+range rings around your `[adsb] lat/lon` home (or auto-centered), track-
+rotated arrows (altitude-colored for aircraft), position trails. AIS ships
+ride the same radar and table.
+
+**Trunk following (experimental):** while a digital-voice mode runs, deck
+serves rigctl on `127.0.0.1:4532`; add `-U 4532` to your dsd-neo decoder
+override and its trunking engine drives deck's tuner — in-band hops are
+instant NCO swaps. The
 scanner also honors a **priority channel** (revisited every few hops), and
 **F12** drops an in-app screenshot into `~/Music/deck/screens/` for field
 logging.
@@ -165,7 +180,7 @@ missing and which modes it unlocks):
 
 | distro | command |
 |---|---|
-| Arch | `pacman -S rtl-sdr airspyhf multimon-ng sox minimodem dump1090 libpulse` |
+| Arch | `pacman -S rtl-sdr airspyhf hackrf multimon-ng sox minimodem dump1090 rtl_ais libpulse` |
 | Debian/Ubuntu/Pi OS | `apt install rtl-sdr airspyhf multimon-ng sox minimodem dump1090-fa pulseaudio-utils` |
 | dsd-neo | build from [arancormonk/dsd-neo](https://github.com/arancormonk/dsd-neo) (digital voice) |
 
@@ -238,10 +253,9 @@ interchangeable — point `[pipelines.rtlsdr] adsb = "…"` at whichever you run
 
 ## Roadmap
 
-Spectrum recording (IQ to disk) · stereo WFM · trunk-following via dsd-neo ·
-CTCSS/DCS squelch · priority-channel scan · dBµV/field-strength calibration ·
-band plan overlays · more SDRs (teach `device.rs::USB_IDS` + an IQ source
-template)
+Stereo WFM (pilot decode) · DCS squelch · absolute dBµV calibration tables ·
+Airspy R2/Mini (needs fractional-rate decimation) · more SDRs (teach
+`device.rs::USB_IDS` + an IQ source template)
 
 ## License
 

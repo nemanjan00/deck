@@ -1781,7 +1781,7 @@ fn draw_adsb_map(app: &mut DeckApp, ui: &mut egui::Ui, th: &Theme) {
     p.text(
         rect.left_bottom() + EVec2::new(8.0, -6.0),
         Align2::LEFT_BOTTOM,
-        format!("{} aircraft · alt color: <100 <250 FL+", rows.len()),
+        format!("{} tracks · alt color: <100 <250 FL+", rows.len()),
         FontId::proportional(10.0),
         th.text_faint,
     );

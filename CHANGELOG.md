@@ -15,6 +15,19 @@
 - ADS-B offline radar view: range rings, home QTH ([adsb] lat/lon or traffic
   centroid), track-rotated altitude-colored arrows, position trails
 - F12 in-app screenshot to recordings/screens/ (field logging)
+- Radar gained real geography: embedded Natural Earth coastlines + borders
+  (68 KB, public domain, offline)
+- AIS mode: AIVDM decoder (1/2/3/18 positions, 5/24A names, fragments,
+  checksums), rtl_ais template, boat-fleet simulator — ships share the
+  radar/table with aircraft
+- CTCSS tone squelch: 38-tone Goertzel detector, live tone chip, gate +
+  recorder require the selected tone
+- SSB IF shift (±800 Hz, pitch-preserving), [sdr] cal_db level calibration
+- Waterfall: raw IQ recording (.cu8/.cs16 + sidecar), SWEEP
+  search-between-limits feeding the peak browser, band-plan overlay
+- HackRF One support (cs8, hackrf_transfer template, author-untested)
+- rigctl server for dsd-neo trunk following (-U 4532): decoder-driven
+  retunes; in-band hops are instant
 
 ## 0.1.0 — 2026-07-06
 

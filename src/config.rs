@@ -268,6 +268,15 @@ pub fn default_config_toml() -> String {
 [sdr]
 ppm = 0        # frequency correction, applied where the tool supports it
 gain = 32.8    # default tuner gain in dB (adjust live with +/-)
+cal_db = 0.0   # added to band level readouts (calibrate vs a known source)
+
+# rigctl_port = 4532  # dsd-neo trunk following: add `-U 4532` to its
+#                     # decoder override; 0 disables the server
+
+[sweep]            # waterfall SWEEP (search-between-limits)
+from = 430000000
+to = 440000000
+dwell_ms = 1200
 
 [ui]
 theme = "dark"    # "dark" (hacker phosphor) | "light"
@@ -285,6 +294,8 @@ sink = "auto"
 [adsb]
 sbs_host = "127.0.0.1"
 sbs_port = 30003
+# lat = 44.81   # radar map home; 0,0 = auto-center on traffic
+# lon = 20.46
 # deck reads BaseStation (SBS) from this TCP port, so ANY 1090 decoder works:
 # dump1090, readsb — or rtl1090 under wine (it serves the same feed on 30003).
 

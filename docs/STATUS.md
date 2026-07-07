@@ -7,8 +7,12 @@ memories, scanner PRIORITY channel (LEFT/P toggles, revisited every 4 hops),
 peak->memory (LEFT/mem+), ADS-B offline RADAR view (VIEW control: rings,
 track arrows, alt colors, trails, home via [adsb] lat/lon), F12 in-app
 screenshot -> recordings/screens/.
-All of the above documented + screenshotted (adsb-radar scene included).
-NEXT: user pushes; cut v0.2.0 when ready (Unreleased section is complete).
+Roadmap clearance session (2026-07-07): world-map radar layer, AIS mode,
+CTCSS tone squelch, IF shift, cal_db, IQ recording, SWEEP, band-plan
+overlay, HackRF (untested), rigctl trunk-following server. All tested where
+testable without hardware; 73 tests green.
+NEXT: cut v0.2.0. Remaining roadmap: stereo WFM, DCS, absolute dBµV cal,
+Airspy R2 (fractional rates).
 
 ## Done (v0.1.0)
 
