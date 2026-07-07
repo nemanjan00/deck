@@ -28,6 +28,9 @@
 - HackRF One support (cs8, hackrf_transfer template, author-untested)
 - rigctl server for dsd-neo trunk following (-U 4532): decoder-driven
   retunes; in-band hops are instant
+- AppImage CI: rolling `continuous` prerelease + tagged releases ship
+  ready-to-run x86_64/aarch64 AppImages (built on glibc 2.35 for Pi OS
+  bookworm compatibility); `deck shot --icon` renders the app icon
 - Tuning aid: focusing the frequency tuner temporarily switches the viz to
   the RF band scope (drag/click to tune there too); leaves it as you left
   it when focus moves on

@@ -64,6 +64,12 @@ enum Cmd {
         /// output directory
         #[arg(long, default_value = "docs/shots")]
         out: PathBuf,
+        /// render the app icon PNG to this path instead of screenshots
+        #[arg(long)]
+        icon: Option<PathBuf>,
+        /// icon size in pixels
+        #[arg(long, default_value_t = 256)]
+        icon_size: u32,
     },
 }
 
@@ -107,7 +113,14 @@ fn main() -> Result<()> {
             }
             Ok(())
         }
-        Some(Cmd::Shot { out }) => gui::shot::run(&out),
+        Some(Cmd::Shot {
+            out,
+            icon,
+            icon_size,
+        }) => match icon {
+            Some(p) => gui::shot::render_icon(&p, icon_size),
+            None => gui::shot::run(&out),
+        },
         None => run_gui(cli),
     }
 }

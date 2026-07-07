@@ -372,6 +372,39 @@ pub fn default_shots() -> Vec<ShotSpec> {
     v
 }
 
+/// Render the app icon (AppImage/desktop) with the same vector logo.
+pub fn render_icon(path: &Path, size: u32) -> Result<()> {
+    use eframe::egui::{self, Color32, Rect, Vec2};
+    let rgba = super::raster::render_rgba(size, size, 1.0, 2, |ctx| {
+        egui::CentralPanel::default()
+            .frame(egui::Frame::none().fill(Color32::TRANSPARENT))
+            .show(ctx, |ui| {
+                let r = ui.max_rect();
+                let p = ui.painter();
+                let rounding = r.width() * 0.22;
+                p.rect_filled(r, rounding, Color32::from_rgb(0x0a, 0x0e, 0x12));
+                p.rect_filled(
+                    r.shrink(r.width() * 0.045),
+                    rounding * 0.8,
+                    Color32::from_rgb(0x11, 0x17, 0x1d),
+                );
+                let logo = Rect::from_center_size(
+                    r.center() - Vec2::new(0.0, r.height() * 0.04),
+                    Vec2::splat(r.width() * 0.62),
+                );
+                super::icons::logo(
+                    p,
+                    logo,
+                    Color32::from_rgb(0x2d, 0xe6, 0xa8),
+                    Color32::from_rgb(0x3b, 0xc2, 0xff),
+                );
+            });
+    });
+    super::raster::write_png(path, size, size, &rgba)?;
+    println!("wrote {}", path.display());
+    Ok(())
+}
+
 pub fn run(out_dir: &Path) -> Result<()> {
     let shots = default_shots();
     let n = shots.len();

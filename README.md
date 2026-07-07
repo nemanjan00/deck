@@ -184,7 +184,16 @@ missing and which modes it unlocks):
 | Debian/Ubuntu/Pi OS | `apt install rtl-sdr airspyhf multimon-ng sox minimodem dump1090-fa pulseaudio-utils` |
 | dsd-neo | build from [arancormonk/dsd-neo](https://github.com/arancormonk/dsd-neo) (digital voice) |
 
-**deck itself** — grab a release binary (x86_64 / aarch64), or:
+**deck itself** — easiest on a Pi: grab the **AppImage** from the rolling
+[`continuous` prerelease](https://github.com/nemanjan00/deck/releases/tag/continuous)
+(updated on every push to main) or from a versioned release:
+
+```sh
+wget https://github.com/nemanjan00/deck/releases/download/continuous/deck-aarch64.AppImage
+chmod +x deck-aarch64.AppImage && ./deck-aarch64.AppImage
+```
+
+Or a plain release binary (x86_64 / aarch64), or build it yourself:
 
 ```sh
 cargo build --release          # needs Rust 1.79+
