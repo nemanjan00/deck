@@ -74,15 +74,37 @@ fn extern_template(dev: SdrKind, mode: ModeId) -> Option<String> {
                 .into(),
         ),
         (SdrKind::AirspyHf, ModeId::Adsb) => None, // 1090 MHz out of range
-        (SdrKind::RtlSdr, ModeId::Ais) => Some("rtl_ais -d {device} -n -g {gain} -p {ppm}".into()),
-        (SdrKind::AirspyHf, ModeId::Ais) => None, // rtl_ais is RTL-only
-        (SdrKind::HackRf, ModeId::Adsb) => None,  // use dump1090 --device? override in config
-        (SdrKind::HackRf, ModeId::Ais) => None,
+        // AIS via AIS-catcher — device-generic (RTL/Airspy/HackRF/SoapySDR),
+        // both channels at once, NMEA (AIVDM) to stdout with `-o 5`. Falls
+        // back to rtl_ais on RTL if AIS-catcher isn't installed; both are
+        // config-overridable via [pipelines.<dev>] ais.
+        (d, ModeId::Ais) if d != SdrKind::Sim => Some(ais_template(dev)),
+        (SdrKind::HackRf, ModeId::Adsb) => None, // use dump1090 --device? override in config
         (SdrKind::Sim, m) => Some(format!(
             "'{{deck}}' simgen --mode {} --lines",
             mode_def(m).key
         )),
         _ => None,
+    }
+}
+
+/// AIS decoder command. Prefers AIS-catcher (device-generic: RTL, Airspy,
+/// HackRF, SoapySDR; both channels; NMEA/AIVDM to stdout via `-o 5`). Falls
+/// back to rtl_ais on an RTL dongle. Override per device in
+/// `[pipelines.<dev>] ais`.
+fn ais_template(dev: SdrKind) -> String {
+    if which("AIS-catcher").is_some() {
+        let sel = match dev {
+            SdrKind::RtlSdr => "-d {device}",
+            // AIS-catcher picks the device by driver; -gu/-gr tuning defaults
+            SdrKind::AirspyHf => "-d AIRSPYHF",
+            SdrKind::HackRf => "-d HACKRF",
+            SdrKind::Sim => "",
+        };
+        format!("AIS-catcher {sel} -o 5 -q")
+    } else {
+        // rtl_ais is RTL-only; used only if AIS-catcher isn't present
+        "rtl_ais -d {device} -n -g {gain} -p {ppm}".into()
     }
 }
 

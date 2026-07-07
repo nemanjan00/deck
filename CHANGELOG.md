@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Recordings: real in-app player (play/pause, ±5 s, scrubbable progress bar),
+  replacing fire-and-forget paplay
+- AIS is now device-generic via AIS-catcher (RTL/Airspy/HackRF/SoapySDR),
+  falling back to rtl_ais on RTL — works on Airspy now
+- Digital voice: always play decoded audio (no longer gated on a stale
+  `monitor` flag); decoder-feed headroom deepened to stop clipping
+
 - Digital voice: deck now owns the decoded audio (dsd-neo `-o -`) — plays it
   through deck's sink, records the actual voice, enables postprocessing;
   parses call info from stderr; `-s 48000` fixes symbol timing
