@@ -7,8 +7,8 @@ memories, scanner PRIORITY channel (LEFT/P toggles, revisited every 4 hops),
 peak->memory (LEFT/mem+), ADS-B offline RADAR view (VIEW control: rings,
 track arrows, alt colors, trails, home via [adsb] lat/lon), F12 in-app
 screenshot -> recordings/screens/.
-NEXT: regenerate shots (add adsb radar scene), README/CHANGELOG for the new
-batch, then re-tag or v0.2.0.
+All of the above documented + screenshotted (adsb-radar scene included).
+NEXT: user pushes; cut v0.2.0 when ready (Unreleased section is complete).
 
 ## Done (v0.1.0)
 
