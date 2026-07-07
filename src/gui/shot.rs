@@ -242,7 +242,10 @@ fn demo_app(scene: &str, dark: bool) -> DeckApp {
                 });
             }
         }
-        "adsb" => {
+        "adsb" | "adsb-radar" => {
+            if scene == "adsb-radar" {
+                app.mode_ui(ModeId::Adsb).viz = 1;
+            }
             fake_running(&mut app, ModeId::Adsb, 1_090_000_000);
             let mut fleet = crate::sim::adsb::Fleet::new(42, 7, 44.82, 20.29);
             let t0 = Instant::now();
@@ -279,7 +282,7 @@ fn demo_app(scene: &str, dark: bool) -> DeckApp {
 
     app.screen = match scene {
         "menu" => Screen::Menu,
-        "adsb" => Screen::Mode(ModeId::Adsb),
+        "adsb" | "adsb-radar" => Screen::Mode(ModeId::Adsb),
         "nfm" => Screen::Mode(ModeId::Nfm),
         "waterfall" => Screen::Mode(ModeId::Waterfall),
         "dmr" => Screen::Mode(ModeId::Dmr),
@@ -312,6 +315,7 @@ pub fn default_shots() -> Vec<ShotSpec> {
         "pocsag",
         "aprs",
         "adsb",
+        "adsb-radar",
         "scanner",
     ] {
         v.push(ShotSpec {
