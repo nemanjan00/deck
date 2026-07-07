@@ -30,6 +30,7 @@ pub enum Screen {
     Mode(ModeId),
     Devices,
     Doctor,
+    Recordings,
 }
 
 /// Per-mode UI state (freq editor, focus, pending retunes).
@@ -85,6 +86,7 @@ pub enum Tile {
     Mode(ModeId),
     Devices,
     Doctor,
+    Recordings,
     Power,
 }
 
@@ -95,6 +97,7 @@ pub fn tiles() -> Vec<(Section, Tile)> {
         .collect();
     v.push((Section::Tools, Tile::Devices));
     v.push((Section::Tools, Tile::Doctor));
+    v.push((Section::Tools, Tile::Recordings));
     v.push((Section::Tools, Tile::Power));
     v
 }
@@ -116,6 +119,7 @@ pub struct DeckApp {
     pub wf_band_tex: WfTex,
     pub detail: Option<String>,
     pub doctor: misc::DoctorState,
+    pub recordings: misc::RecordingsState,
     pub support: HashMap<ModeId, Option<String>>, // None = ok, Some(reason) = blocked
     support_dev: usize,
     /// suppress input handling for the frame after a screen switch
@@ -158,6 +162,7 @@ impl DeckApp {
             wf_band_tex: WfTex::default(),
             detail: None,
             doctor: misc::DoctorState::default(),
+            recordings: misc::RecordingsState::default(),
             support: HashMap::new(),
             support_dev: usize::MAX,
             nav_cooldown: 0,
@@ -403,6 +408,7 @@ impl DeckApp {
             Screen::Mode(m) => modeview::draw(self, ctx, m),
             Screen::Devices => misc::draw_devices(self, ctx),
             Screen::Doctor => misc::draw_doctor(self, ctx),
+            Screen::Recordings => misc::draw_recordings(self, ctx),
         }
         misc::draw_power_popup(self, ctx);
         self.draw_detail_popup(ctx);
@@ -471,6 +477,7 @@ impl DeckApp {
                     self.nav_cooldown = 1;
                 }
             }
+            Screen::Recordings => misc::recordings_keys(self, esc, enter, up, down, right),
         }
     }
 
@@ -493,6 +500,12 @@ impl DeckApp {
             Tile::Doctor => {
                 self.doctor.ensure_report(&self.session.cfg);
                 self.screen = Screen::Doctor;
+                self.nav_cooldown = 1;
+            }
+            Tile::Recordings => {
+                self.recordings.refresh(&self.session.cfg);
+                self.recordings.sel = 0;
+                self.screen = Screen::Recordings;
                 self.nav_cooldown = 1;
             }
             Tile::Power => self.power_sel = Some(0),
@@ -690,6 +703,7 @@ impl DeckApp {
             Some(Tile::Mode(m)) => mode_def(m).desc.to_string(),
             Some(Tile::Devices) => "select / rescan SDR hardware".to_string(),
             Some(Tile::Doctor) => "environment report & selftest".to_string(),
+            Some(Tile::Recordings) => "browse, play and delete recordings".to_string(),
             Some(Tile::Power) => "suspend · reboot · power off".to_string(),
             None => "arrows move · OK open · BACK power · T theme".to_string(),
         };
@@ -781,6 +795,12 @@ impl DeckApp {
                 true,
             ),
             Tile::Doctor => ("doctor", "DOCTOR", "env check".to_string(), true),
+            Tile::Recordings => (
+                "rec",
+                "REC LIST",
+                format!("{} files", self.recordings.entries.len()),
+                true,
+            ),
             Tile::Power => ("power", "POWER", "off · reboot".to_string(), true),
         };
         let resp = widgets::tile(ui, th, size, key, label, &sub, focused, enabled);

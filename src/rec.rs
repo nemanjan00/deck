@@ -1,8 +1,90 @@
-//! Minimal WAV (RIFF) writer for RX recordings: s16le mono.
+//! Minimal WAV (RIFF) writer for RX recordings: s16le mono, plus a scan of
+//! the recordings folder for the in-app explorer.
 
 use std::fs::File;
-use std::io::{Seek, SeekFrom, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::time::SystemTime;
+
+/// One file in the recordings folder (WAV audio or raw IQ capture).
+pub struct RecEntry {
+    pub path: PathBuf,
+    pub name: String,
+    pub bytes: u64,
+    /// duration in seconds for WAV files; 0 for raw IQ
+    pub secs: f32,
+    pub modified: SystemTime,
+    pub is_wav: bool,
+}
+
+/// Duration of a mono WAV in seconds from its header (0 on any problem).
+fn wav_seconds(path: &Path) -> f32 {
+    let mut f = match File::open(path) {
+        Ok(f) => f,
+        Err(_) => return 0.0,
+    };
+    let mut h = [0u8; 44];
+    if f.read_exact(&mut h).is_err() || &h[..4] != b"RIFF" {
+        return 0.0;
+    }
+    let rate = u32::from_le_bytes([h[24], h[25], h[26], h[27]]);
+    let data = u32::from_le_bytes([h[40], h[41], h[42], h[43]]);
+    if rate == 0 {
+        0.0
+    } else {
+        data as f32 / (rate as f32 * 2.0)
+    }
+}
+
+/// List recordings (newest first). Covers .wav and the raw IQ extensions.
+pub fn list_recordings(dir: &Path) -> Vec<RecEntry> {
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir(dir) else {
+        return out;
+    };
+    for e in rd.flatten() {
+        let path = e.path();
+        let ext = path
+            .extension()
+            .and_then(|x| x.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let is_wav = ext == "wav";
+        if !is_wav && !matches!(ext.as_str(), "cu8" | "cs8" | "cs16" | "cf32") {
+            continue;
+        }
+        let md = match e.metadata() {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        out.push(RecEntry {
+            name: path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            secs: if is_wav { wav_seconds(&path) } else { 0.0 },
+            bytes: md.len(),
+            modified: md.modified().unwrap_or(SystemTime::UNIX_EPOCH),
+            is_wav,
+            path,
+        });
+    }
+    out.sort_by(|a, b| b.modified.cmp(&a.modified));
+    out
+}
+
+/// Human-readable byte size.
+pub fn fmt_size(bytes: u64) -> String {
+    if bytes >= 1 << 30 {
+        format!("{:.1} GB", bytes as f64 / (1u64 << 30) as f64)
+    } else if bytes >= 1 << 20 {
+        format!("{:.1} MB", bytes as f64 / (1u64 << 20) as f64)
+    } else if bytes >= 1 << 10 {
+        format!("{:.0} kB", bytes as f64 / (1u64 << 10) as f64)
+    } else {
+        format!("{bytes} B")
+    }
+}
 
 pub struct WavWriter {
     f: File,
@@ -90,6 +172,26 @@ pub fn recording_filename(mode_key: &str, freq_hz: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn scan_lists_and_reads_duration() {
+        let tmp = std::env::temp_dir().join(format!("deck-rectest-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let mut w = WavWriter::create(&tmp.join("a.wav"), 48_000).unwrap();
+        w.write_s16(&vec![0u8; 48_000 * 2]).unwrap(); // 1.0 s
+        w.finalize().unwrap();
+        std::fs::write(tmp.join("b.cu8"), vec![0u8; 4096]).unwrap();
+        std::fs::write(tmp.join("skip.txt"), b"x").unwrap();
+        let rows = list_recordings(&tmp);
+        assert_eq!(rows.len(), 2, "wav + cu8, txt skipped");
+        let wav = rows.iter().find(|r| r.name == "a.wav").unwrap();
+        assert!((wav.secs - 1.0).abs() < 0.01);
+        assert!(wav.is_wav);
+        let iq = rows.iter().find(|r| r.name == "b.cu8").unwrap();
+        assert!(!iq.is_wav);
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 
     #[test]
     fn wav_header_is_valid() {

@@ -225,6 +225,163 @@ pub fn devices_keys(app: &mut DeckApp, esc: bool, enter: bool, up: bool, down: b
     }
 }
 
+// ---------------------------------------------------------------- recordings
+
+#[derive(Default)]
+pub struct RecordingsState {
+    pub entries: Vec<crate::rec::RecEntry>,
+    pub sel: usize,
+    pub dir: std::path::PathBuf,
+    pub player: Option<crate::pipeline::Spawned>,
+}
+
+impl RecordingsState {
+    pub fn refresh(&mut self, cfg: &crate::config::Config) {
+        self.dir = crate::rec::recordings_dir(&cfg.audio.record_dir);
+        self.entries = crate::rec::list_recordings(&self.dir);
+        if self.sel >= self.entries.len() {
+            self.sel = self.entries.len().saturating_sub(1);
+        }
+    }
+
+    fn stop_player(&mut self) {
+        if let Some(sp) = self.player.take() {
+            crate::pipeline::kill_group(sp.pgid);
+        }
+    }
+}
+
+pub fn draw_recordings(app: &mut DeckApp, ctx: &egui::Context) {
+    let th = app.th.clone();
+    app.status_bar(ctx, "Recordings", true);
+    app.hint_bar(ctx, "up/down select · OK play/stop · RIGHT delete · BACK menu");
+    let sel = app.recordings.sel;
+    let mut play: Option<usize> = None;
+    let mut delete: Option<usize> = None;
+    egui::CentralPanel::default()
+        .frame(egui::Frame::none().fill(th.bg).inner_margin(10.0))
+        .show(ctx, |ui| {
+            ui.label(
+                RichText::new(app.recordings.dir.to_string_lossy())
+                    .size(11.0)
+                    .color(th.text_dim),
+            );
+            ui.add_space(4.0);
+            if app.recordings.entries.is_empty() {
+                ui.label(
+                    RichText::new("no recordings yet — hit RECORD while receiving")
+                        .color(th.text_faint),
+                );
+                return;
+            }
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    for (i, e) in app.recordings.entries.iter().enumerate() {
+                        let selected = i == sel;
+                        let dur = if e.is_wav {
+                            format!("{:02}:{:02}", (e.secs as u32) / 60, (e.secs as u32) % 60)
+                        } else {
+                            "IQ".to_string()
+                        };
+                        let line =
+                            format!("{:<42} {:>8} {:>6}", e.name, crate::rec::fmt_size(e.bytes), dur);
+                        let resp = ui.add(
+                            egui::Label::new(
+                                RichText::new(line)
+                                    .font(FontId::monospace(12.5))
+                                    .color(if selected { th.sel_fg } else { th.text })
+                                    .background_color(if selected {
+                                        th.sel_bg
+                                    } else {
+                                        egui::Color32::TRANSPARENT
+                                    }),
+                            )
+                            .sense(Sense::click())
+                            .truncate(),
+                        );
+                        if resp.clicked() {
+                            play = Some(i);
+                        }
+                        let del = ui.add(
+                            egui::Button::new(RichText::new("x").size(13.0).color(th.err))
+                                .small()
+                                .frame(false),
+                        );
+                        if del.clicked() {
+                            delete = Some(i);
+                        }
+                    }
+                });
+        });
+    if let Some(i) = play {
+        app.recordings.sel = i;
+        toggle_play(app, i);
+    }
+    if let Some(i) = delete {
+        delete_recording(app, i);
+    }
+}
+
+/// Play a WAV via the system player (paplay/aplay handle the header). Raw IQ
+/// files aren't audio — selecting one shows a hint instead.
+fn toggle_play(app: &mut DeckApp, i: usize) {
+    app.recordings.stop_player();
+    let Some(e) = app.recordings.entries.get(i) else {
+        return;
+    };
+    if !e.is_wav {
+        app.session.set_status("raw IQ capture — not playable as audio");
+        return;
+    }
+    let player = if app.session.tools.has("paplay") {
+        "paplay"
+    } else if app.session.tools.has("aplay") {
+        "aplay"
+    } else {
+        app.session.set_status("no audio player found (paplay/aplay)");
+        return;
+    };
+    let cmd = format!("{player} '{}'", e.path.to_string_lossy());
+    match crate::pipeline::spawn_shell(&cmd, false, false) {
+        Ok(sp) => {
+            let name = e.name.clone();
+            app.recordings.player = Some(sp);
+            app.session.set_status(format!("playing {name}"));
+        }
+        Err(err) => app.session.set_status(format!("play failed: {err}")),
+    }
+}
+
+fn delete_recording(app: &mut DeckApp, i: usize) {
+    if let Some(e) = app.recordings.entries.get(i) {
+        let _ = std::fs::remove_file(&e.path);
+    }
+    let cfg = app.session.cfg.clone();
+    app.recordings.refresh(&cfg);
+    app.session.set_status("deleted");
+}
+
+pub fn recordings_keys(app: &mut DeckApp, esc: bool, enter: bool, up: bool, down: bool, right: bool) {
+    let n = app.recordings.entries.len();
+    if up {
+        app.recordings.sel = app.recordings.sel.saturating_sub(1);
+    }
+    if down && n > 0 {
+        app.recordings.sel = (app.recordings.sel + 1).min(n - 1);
+    }
+    if enter {
+        toggle_play(app, app.recordings.sel);
+    }
+    if right {
+        delete_recording(app, app.recordings.sel);
+    }
+    if esc {
+        app.recordings.stop_player();
+        app.screen = Screen::Menu;
+    }
+}
+
 // ------------------------------------------------------------------ doctor
 
 #[derive(Default)]
