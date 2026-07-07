@@ -135,9 +135,14 @@ endgroup
 
 # Custom AppRun: put bundled tools on PATH so deck's `which()` finds them,
 # and bundled libs on LD_LIBRARY_PATH for the tools + deck.
+# NB: linuxdeploy leaves AppRun as a SYMLINK into usr/bin/deck — remove it
+# first, or `cat >` follows the symlink and clobbers the deck binary (which
+# then makes AppRun's $HERE resolve to usr/bin, doubling the exec path).
+rm -f "$APPDIR/AppRun"
 cat > "$APPDIR/AppRun" <<'EOF'
 #!/bin/sh
-HERE="$(dirname "$(readlink -f "$0")")"
+# $APPDIR is set by the AppImage runtime; fall back to $0's dir otherwise.
+HERE="${APPDIR:-$(dirname "$(readlink -f "$0")")}"
 export PATH="$HERE/usr/bin:$PATH"
 export LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/usr/lib/$(uname -m)-linux-gnu:${LD_LIBRARY_PATH:-}"
 exec "$HERE/usr/bin/deck" "$@"
