@@ -114,8 +114,12 @@ pub fn parse_line(line: &str) -> CallFields {
     if let Some(v) = field_after(&up, &["CAN"]) {
         f.extra.push(("CAN".into(), v.into()));
     }
-    if let Some(v) = field_after(line, &["RPT1"]) {
+    // dsd-neo prints "RPT 1:"/"RPT 2:" (with a space); DSD-FME uses "RPT1".
+    if let Some(v) = field_after(line, &["RPT1", "RPT 1"]) {
         f.extra.push(("RPT1".into(), v.into()));
+    }
+    if let Some(v) = field_after(line, &["RPT2", "RPT 2"]) {
+        f.extra.push(("RPT2".into(), v.into()));
     }
 
     // CC false-positives: "CC" inside words is guarded by token boundary,
