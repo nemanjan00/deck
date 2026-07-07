@@ -22,9 +22,16 @@ use std::time::Duration;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum IqFormat {
+    /// interleaved unsigned 8-bit (rtl_sdr)
     Cu8,
+    /// interleaved signed 8-bit (hackrf_transfer)
     Cs8,
+    /// interleaved signed 16-bit LE (supported by the pump; not currently
+    /// the default for any device, but usable via a config iq_source)
+    #[allow(dead_code)]
     Cs16,
+    /// interleaved 32-bit float (airspyhf_rx default output)
+    F32,
 }
 
 /// Per-device IQ front-end: (source template, format, sample rate).
@@ -36,8 +43,11 @@ pub fn iq_source(dev: SdrKind) -> (&'static str, IqFormat, u32) {
             2_400_000,
         ),
         SdrKind::AirspyHf => (
+            // airspyhf_rx emits interleaved complex float32 (8 bytes/sample),
+            // NOT int16 — decoding it as cs16 scrambles I/Q into a spectrum
+            // mirrored about center with no demodulatable signal.
             "airspyhf_rx -f {center_mhz} -a 768000 -r /dev/stdout",
-            IqFormat::Cs16,
+            IqFormat::F32,
             768_000,
         ),
         SdrKind::HackRf => (

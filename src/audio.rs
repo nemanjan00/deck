@@ -364,6 +364,7 @@ fn pump(
     let bytes_per = match cfg.format {
         IqFormat::Cu8 | IqFormat::Cs8 => 2usize,
         IqFormat::Cs16 => 4usize,
+        IqFormat::F32 => 8usize,
     };
     let mut raw = vec![0u8; 16384 * bytes_per];
     let mut leftover: Vec<u8> = Vec::new();
@@ -405,6 +406,15 @@ fn pump(
                     )
                 })
                 .collect(),
+            IqFormat::F32 => bytes[..usable]
+                .chunks_exact(8)
+                .map(|b| {
+                    Complex32::new(
+                        f32::from_le_bytes([b[0], b[1], b[2], b[3]]),
+                        f32::from_le_bytes([b[4], b[5], b[6], b[7]]),
+                    )
+                })
+                .collect(),
         };
         if iq.is_empty() {
             continue;
@@ -419,6 +429,7 @@ fn pump(
                         IqFormat::Cu8 => "cu8",
                         IqFormat::Cs8 => "cs8",
                         IqFormat::Cs16 => "cs16",
+                        IqFormat::F32 => "cf32",
                     };
                     let path = base.with_extension(ext);
                     if let Some(dir) = path.parent() {

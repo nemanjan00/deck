@@ -1326,7 +1326,9 @@ fn handle_band_drag(
         u.openin_sel = 0;
     }
     if resp.dragged() {
-        let dhz = -resp.drag_delta().x as f64 / w * span_hz;
+        // marker follows the cursor: drag right → higher freq (matches the
+        // absolute click-to-tune below, which reads left→low, right→high).
+        let dhz = resp.drag_delta().x as f64 / w * span_hz;
         let cur = app.mode_ui(mode).freq.hz as f64;
         let new = ((cur + dhz) / 100.0).round() * 100.0;
         app.mode_ui(mode).freq.hz = (new.max(0.0) as u64).min(crate::freq::MAX_HZ);
