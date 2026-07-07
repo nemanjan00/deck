@@ -71,14 +71,21 @@ group "dsd-neo (source)"
 # default, and not installed), RTL-SDR and the ncurses UI strips it to its
 # REQUIRED deps only: mbe-neo + libsndfile + OpenSSL + PulseAudio.
 git clone --depth 1 https://github.com/arancormonk/dsd-neo "$STAGE/dsd-neo"
+# BUILD_TESTING=OFF drops the test suite (it fails under -Werror on GCC 11);
+# we only need the app binary (lives in apps/dsd-cli).
 cmake -S "$STAGE/dsd-neo" -B "$STAGE/dsd-neo/build" \
   -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/usr/local \
+  -DBUILD_TESTING=OFF \
   -DDSD_ENABLE_SOAPYSDR=OFF -DDSD_ENABLE_RTLSDR=OFF \
   -DDSD_ENABLE_TERMINAL_UI=OFF
 cmake --build "$STAGE/dsd-neo/build" -j"$JOBS"
-# binary name has varied (dsd-neo / dsd); grab whatever built.
-found="$(find "$STAGE/dsd-neo/build" -maxdepth 3 -type f -executable \
-  \( -name 'dsd-neo' -o -name 'dsd' \) | head -1)"
+# the CLI binary name has varied (dsd-neo / dsd-cli / dsd); grab whatever
+# built, excluding the test binaries, and install it as `dsd-neo`.
+found="$(find "$STAGE/dsd-neo/build" -type f -executable \
+  \( -name 'dsd-neo' -o -name 'dsd-cli' -o -name 'dsd' \) \
+  -not -path '*/tests/*' -not -name '*.so*' | head -1)"
+test -n "$found" || { echo "dsd-neo binary not found in build tree"; \
+  find "$STAGE/dsd-neo/build" -type f -executable -not -name '*.so*'; exit 1; }
 cp -v "$found" "$APPDIR/usr/bin/dsd-neo"
 endgroup
 
