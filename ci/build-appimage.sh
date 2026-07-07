@@ -110,17 +110,30 @@ endgroup
 # inherit V4 support (pkg-config for dump1090; -I/-L for rtl-ais).
 export PKG_CONFIG_PATH="/usr/local/lib/pkgconfig:${PKG_CONFIG_PATH:-}"
 
-group "rtl-ais (source)"
-git clone --depth 1 https://github.com/dgiardini/rtl-ais "$STAGE/rtl-ais"
-make -C "$STAGE/rtl-ais" -j"$JOBS" \
-  CFLAGS="-O2 -I/usr/local/include" LDFLAGS="-L/usr/local/lib"
-cp -v "$STAGE/rtl-ais/rtl_ais" "$APPDIR/usr/bin/"
+# rtl-ais (AIS) and dump1090 (ADS-B) are OPTIONAL extras — a failure here
+# must NOT block the V4-capable core build. Each is best-effort: on failure
+# we warn and continue; the mode just shows "needs tools" in Doctor.
+# Both find the blog librtlsdr in /usr/local via gcc's ENV search paths,
+# which ADD to the search without overriding the Makefiles' own flags.
+group "rtl-ais (source, optional — AIS)"
+if git clone --depth 1 https://github.com/dgiardini/rtl-ais "$STAGE/rtl-ais" \
+  && C_INCLUDE_PATH=/usr/local/include LIBRARY_PATH=/usr/local/lib \
+       make -C "$STAGE/rtl-ais" -j"$JOBS" \
+  && cp -v "$STAGE/rtl-ais/rtl_ais" "$APPDIR/usr/bin/"; then
+  echo "rtl_ais bundled"
+else
+  echo "WARN: rtl-ais build failed — AIS unavailable (V4/core unaffected)"
+fi
 endgroup
 
-group "dump1090 (source, flightaware)"
-git clone --depth 1 https://github.com/flightaware/dump1090 "$STAGE/dump1090"
-make -C "$STAGE/dump1090" -j"$JOBS" BLADERF=no
-cp -v "$STAGE/dump1090/dump1090" "$APPDIR/usr/bin/"
+group "dump1090 (source, optional — ADS-B)"
+if git clone --depth 1 https://github.com/flightaware/dump1090 "$STAGE/dump1090" \
+  && make -C "$STAGE/dump1090" -j"$JOBS" BLADERF=no \
+  && cp -v "$STAGE/dump1090/dump1090" "$APPDIR/usr/bin/"; then
+  echo "dump1090 bundled"
+else
+  echo "WARN: dump1090 build failed — ADS-B unavailable (V4/core unaffected)"
+fi
 endgroup
 
 group "deck"

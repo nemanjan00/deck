@@ -65,11 +65,15 @@ jobs:
       - name: Smoke-test the AppImage
         run: |
           ./deck-${{ matrix.arch }}.AppImage --appimage-extract-and-run --version
-          # confirm the tools really got bundled
           ./deck-${{ matrix.arch }}.AppImage --appimage-extract-and-run doctor \
             | tee doctor.txt
-          for t in rtl_sdr multimon-ng dsd-neo rtl_ais dump1090 sox minimodem; do
-            grep -q "  $t " doctor.txt || { echo "MISSING bundled tool: $t"; exit 1; }
+          # REQUIRED core tools (incl. V4-capable rtl_sdr) — fail if missing.
+          for t in rtl_sdr multimon-ng dsd-neo sox minimodem; do
+            grep -q "  $t " doctor.txt || { echo "MISSING required tool: $t"; exit 1; }
+          done
+          # OPTIONAL extras — warn only; a build failure here must not block V4.
+          for t in rtl_ais dump1090; do
+            grep -q "  $t " doctor.txt || echo "NOTE: optional tool not bundled: $t"
           done
 
       - uses: actions/upload-artifact@v4
