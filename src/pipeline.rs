@@ -442,6 +442,8 @@ pub enum AppEvent {
         run: u64,
         rms: f32,
         spec: Vec<f32>,
+        /// CTCSS tone detected on the demod audio (NFM), if any
+        tone: Option<f32>,
     },
     Iq {
         run: u64,

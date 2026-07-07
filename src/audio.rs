@@ -11,6 +11,7 @@
 //! the scanner fast); crossing the band edge restarts the source process.
 
 use crate::config::Config;
+use crate::dsp::CtcssDet;
 use crate::dsp::{
     self, decim_factors, Agc, AutoNotch, DcBlock, Deemphasis, FilterChain, FirDecim, FirDecimF32,
     FmDemod, Nco, NoiseBlanker, Resampler, SamDemod, SpectralNr, SpectrumFft, SsbDemod,
@@ -353,6 +354,7 @@ fn pump(
     let mut last_iq = Instant::now() - Duration::from_secs(1);
     let mut gate_open = false;
     let mut recorder: Option<crate::rec::WavWriter> = None;
+    let mut ctcss = CtcssDet::new(48_000);
 
     let bytes_per = match cfg.format {
         IqFormat::Cu8 => 2usize,
@@ -471,6 +473,11 @@ fn pump(
             }
         }
 
+        // CTCSS rides below 300 Hz on the raw discriminator output
+        if matches!(cfg.demod, Demod::Nfm) {
+            ctcss.feed(&audio);
+        }
+
         // monitor path
         let rms_now = dsp::rms(&audio);
         let (hp, lp) = (
@@ -500,11 +507,19 @@ fn pump(
             } else if rms_now > sq {
                 gate_open = true;
             }
-            if !gate_open {
-                mon.iter_mut().for_each(|x| *x = 0.0);
-            }
         } else {
             gate_open = true;
+        }
+        // CTCSS tone squelch: gate additionally requires the selected tone
+        let want_chz = knobs.tone_chz.load(Ordering::Relaxed);
+        let tone_ok = want_chz == 0
+            || ctcss
+                .detected
+                .map(|d| (d - want_chz as f32 / 100.0).abs() < 0.5)
+                .unwrap_or(false);
+        let open = gate_open && tone_ok;
+        if !open {
+            mon.iter_mut().for_each(|x| *x = 0.0);
         }
 
         if let Some(snk) = &sink {
@@ -545,7 +560,7 @@ fn pump(
             _ => {}
         }
         if let Some(w) = &mut recorder {
-            if gate_open && w.write_s16(&dsp::f32_to_s16(&mon)).is_err() {
+            if open && w.write_s16(&dsp::f32_to_s16(&mon)).is_err() {
                 recorder = None;
                 if let Ok(mut g) = knobs.record.lock() {
                     *g = None;
@@ -566,6 +581,7 @@ fn pump(
                     run,
                     rms: rms_now,
                     spec,
+                    tone: ctcss.detected,
                 })
                 .is_err()
             {

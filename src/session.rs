@@ -171,6 +171,8 @@ pub struct Stores {
     pub rec_since: Option<Instant>,
     pub sbs_note: Option<String>,
     pub last_rms_at: Instant,
+    /// CTCSS tone currently heard (NFM)
+    pub tone: Option<f32>,
 }
 
 impl Stores {
@@ -199,6 +201,7 @@ impl Stores {
             rec_since: None,
             sbs_note: None,
             last_rms_at: Instant::now(),
+            tone: None,
         }
     }
 
@@ -497,6 +500,9 @@ impl Session {
                 knobs.lp_hz.store(mp.lp, Ordering::Relaxed);
                 knobs.squelch.store(f32_bits(mp.squelch), Ordering::Relaxed);
                 knobs.sync_det.store(mp.det == 1, Ordering::Relaxed);
+                knobs
+                    .tone_chz
+                    .store((mp.tone * 100.0).round() as u32, Ordering::Relaxed);
                 let monitorable = audio_out || decoder_cmd.is_some();
                 knobs
                     .mute
@@ -648,7 +654,13 @@ impl Session {
                 AppEvent::Line { run: er, src, text } if er == run => {
                     self.apply_line(mode, src, text);
                 }
-                AppEvent::Audio { run: er, rms, spec } if er == run => {
+                AppEvent::Audio {
+                    run: er,
+                    rms,
+                    spec,
+                    tone,
+                } if er == run => {
+                    self.stores.tone = tone;
                     self.stores.audio_rms = rms;
                     self.stores.last_rms_at = now;
                     if self.stores.audio_peak.len() != spec.len() {
@@ -942,6 +954,7 @@ impl Session {
             mp.lp = k.lp_hz.load(Ordering::Relaxed);
             mp.squelch = bits_f32(k.squelch.load(Ordering::Relaxed));
             mp.det = u8::from(k.sync_det.load(Ordering::Relaxed));
+            mp.tone = k.tone_chz.load(Ordering::Relaxed) as f32 / 100.0;
             if r.monitorable {
                 mp.monitor = !k.mute.load(Ordering::Relaxed);
             }

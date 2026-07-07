@@ -171,6 +171,8 @@ pub struct ModePersist {
     pub lp: u32,
     /// AM detector: 0 = envelope, 1 = synchronous (SAM)
     pub det: u8,
+    /// CTCSS tone squelch in Hz (0 = off)
+    pub tone: f32,
     /// monitor audio toggle for decoder modes
     pub monitor: bool,
 }

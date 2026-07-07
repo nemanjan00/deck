@@ -814,9 +814,9 @@ pub const CTCSS_TONES: &[f32] = &[
 pub fn goertzel(x: &[f32], fs: f32, f: f32) -> f32 {
     let w = 2.0 * std::f32::consts::PI * f / fs;
     let coeff = 2.0 * w.cos();
-    let (mut s0, mut s1, mut s2) = (0.0f32, 0.0f32, 0.0f32);
+    let (mut s1, mut s2) = (0.0f32, 0.0f32);
     for &v in x {
-        s0 = v + coeff * s1 - s2;
+        let s0 = v + coeff * s1 - s2;
         s2 = s1;
         s1 = s0;
     }
@@ -1102,6 +1102,32 @@ mod tests {
         sam.process(&iq, &mut audio);
         let f = dominant_freq(&audio[48_000..], fs as f32);
         assert!((f - 800.0).abs() < 40.0, "sam got {f} Hz");
+    }
+
+    #[test]
+    fn ctcss_detects_tone_under_voice() {
+        let fs = 48_000u32;
+        let mut det = CtcssDet::new(fs);
+        let mut rng = Rng::new(21);
+        let audio: Vec<f32> = (0..24_000)
+            .map(|i| {
+                let t = i as f32 / fs as f32;
+                let sub = (2.0 * std::f32::consts::PI * 88.5 * t).sin() * 0.15;
+                let voice = (2.0 * std::f32::consts::PI * 900.0 * t).sin() * 0.4;
+                sub + voice + rng.gauss() as f32 * 0.03
+            })
+            .collect();
+        det.feed(&audio);
+        let d = det.detected.expect("tone found");
+        assert!((d - 88.5).abs() < 0.1, "got {d}");
+
+        // no sub-audio tone → no detection
+        let mut det2 = CtcssDet::new(fs);
+        let clean: Vec<f32> = (0..24_000)
+            .map(|i| (2.0 * std::f32::consts::PI * 900.0 * i as f32 / fs as f32).sin() * 0.4)
+            .collect();
+        det2.feed(&clean);
+        assert!(det2.detected.is_none(), "got {:?}", det2.detected);
     }
 
     #[test]

@@ -36,6 +36,8 @@ pub enum Ctl {
     Span,
     /// save the tuned frequency as a memory channel
     MemSave,
+    /// CTCSS tone squelch (NFM)
+    Tone,
 }
 
 fn controls_for(mode: ModeId) -> Vec<Ctl> {
@@ -56,6 +58,9 @@ fn controls_for(mode: ModeId) -> Vec<Ctl> {
             if matches!(def.pipe, PipeKind::Iq(Demod::Am)) {
                 v.push(Ctl::Det);
             }
+            if matches!(def.pipe, PipeKind::Iq(Demod::Nfm)) && def.decoder.is_none() {
+                v.push(Ctl::Tone);
+            }
             if def.decoder.is_some() {
                 v.push(Ctl::Mon);
             }
@@ -64,6 +69,7 @@ fn controls_for(mode: ModeId) -> Vec<Ctl> {
         }
         if mode == ModeId::Scanner {
             v.push(Ctl::Pause);
+            v.push(Ctl::Tone);
         }
         if mode == ModeId::Waterfall {
             v.push(Ctl::Span);
@@ -152,6 +158,7 @@ fn ctl_label(c: Ctl) -> &'static str {
         Ctl::OpenIn => "OPEN IN",
         Ctl::Span => "SPAN",
         Ctl::MemSave => "MEMORY",
+        Ctl::Tone => "CTCSS",
     }
 }
 
@@ -252,6 +259,13 @@ fn ctl_value(app: &DeckApp, mode: ModeId, c: Ctl) -> String {
             crate::freq::fmt_short(u64::from(span))
         }
         Ctl::MemSave => format!("{} saved", app.session.persist.memories.len()),
+        Ctl::Tone => {
+            if mp.tone <= 0.0 {
+                "off".into()
+            } else {
+                format!("{:.1} Hz", mp.tone)
+            }
+        }
     }
 }
 
@@ -276,6 +290,8 @@ fn apply_knobs(app: &mut DeckApp, mode: ModeId) {
     k.lp_hz.store(mp.lp, Ordering::Relaxed);
     k.squelch.store(f32_bits(mp.squelch), Ordering::Relaxed);
     k.sync_det.store(mp.det == 1, Ordering::Relaxed);
+    k.tone_chz
+        .store((mp.tone * 100.0).round() as u32, Ordering::Relaxed);
     if r.monitorable {
         k.mute.store(!mp.monitor, Ordering::Relaxed);
     }
@@ -322,6 +338,21 @@ fn adjust(app: &mut DeckApp, mode: ModeId, c: Ctl, dir: i32) {
             Ctl::Span => {
                 ui.span = ((ui.span as i32 + dir).rem_euclid(4)) as u8;
                 return;
+            }
+            Ctl::Tone => {
+                // ladder: off + the 38 standard tones
+                let tones = crate::dsp::CTCSS_TONES;
+                let cur = tones
+                    .iter()
+                    .position(|t| (*t - mp.tone).abs() < 0.05)
+                    .map(|i| i as i32 + 1)
+                    .unwrap_or(0);
+                let next = (cur + dir).rem_euclid(tones.len() as i32 + 1);
+                mp.tone = if next == 0 {
+                    0.0
+                } else {
+                    tones[next as usize - 1]
+                };
             }
             _ => return,
         }
@@ -1223,6 +1254,12 @@ fn draw_audio_info(app: &mut DeckApp, ui: &mut egui::Ui, mode: ModeId, th: &Them
         }
         if mp.notch {
             widgets::chip(ui, th, "NOTCH", "auto", th.accent);
+        }
+        if let Some(t) = app.session.stores.tone {
+            widgets::chip(ui, th, "CTCSS", &format!("{t:.1}"), th.ok);
+        }
+        if mp.tone > 0.0 {
+            widgets::chip(ui, th, "TSQL", &format!("{:.1}", mp.tone), th.warn);
         }
         if mp.hp > 0 || mp.lp > 0 {
             widgets::chip(

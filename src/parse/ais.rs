@@ -95,7 +95,7 @@ fn decode_payload(bits: &[bool]) -> Option<AisMsg> {
         }
     };
     match t {
-        1 | 2 | 3 => {
+        1..=3 => {
             let sog = take_u(bits, 50, 10);
             if sog != 1023 {
                 m.sog = Some(sog as f32 / 10.0);
@@ -125,12 +125,10 @@ fn decode_payload(bits: &[bool]) -> Option<AisMsg> {
                 }
             }
         }
-        24 => {
-            if take_u(bits, 38, 2) == 0 && bits.len() >= 160 {
-                let name = take_str(bits, 40, 120);
-                if !name.is_empty() {
-                    m.name = Some(name);
-                }
+        24 if take_u(bits, 38, 2) == 0 && bits.len() >= 160 => {
+            let name = take_str(bits, 40, 120);
+            if !name.is_empty() {
+                m.name = Some(name);
             }
         }
         _ => {}
