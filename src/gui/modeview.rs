@@ -42,6 +42,8 @@ pub enum Ctl {
     IfShift,
     /// waterfall search-between-limits
     Sweep,
+    /// auto-record on signal/call
+    AutoRec,
 }
 
 fn controls_for(mode: ModeId) -> Vec<Ctl> {
@@ -72,6 +74,7 @@ fn controls_for(mode: ModeId) -> Vec<Ctl> {
                 v.push(Ctl::Mon);
             }
             v.push(Ctl::Rec);
+            v.push(Ctl::AutoRec);
             v.push(Ctl::Viz);
         }
         if mode == ModeId::Scanner {
@@ -161,6 +164,7 @@ fn ctl_label(c: Ctl) -> &'static str {
         Ctl::Det => "AM DETECTOR",
         Ctl::Mon => "MONITOR",
         Ctl::Rec => "RECORD",
+        Ctl::AutoRec => "AUTO REC",
         Ctl::Viz => "VIZ",
         Ctl::Pause => "SCAN",
         Ctl::Log => "LOG",
@@ -284,6 +288,14 @@ fn ctl_value(app: &DeckApp, mode: ModeId, c: Ctl) -> String {
                 format!("{:+} Hz", mp.if_shift)
             }
         }
+        Ctl::AutoRec => {
+            let on = app
+                .mode_ui
+                .get(&mode)
+                .map(|u| u.mp.autorecord)
+                .unwrap_or(false);
+            if on { "on" } else { "off" }.into()
+        }
         Ctl::Sweep => match &app.sweep {
             Some(sw) => format!("{}%", (sw.idx * 100) / sw.centers.len().max(1)),
             None => {
@@ -322,6 +334,7 @@ fn apply_knobs(app: &mut DeckApp, mode: ModeId) {
     k.tone_chz
         .store((mp.tone * 100.0).round() as u32, Ordering::Relaxed);
     k.if_shift.store(mp.if_shift, Ordering::Relaxed);
+    k.autorecord.store(mp.autorecord, Ordering::Relaxed);
     if r.monitorable {
         k.mute.store(!mp.monitor, Ordering::Relaxed);
     }
@@ -408,6 +421,11 @@ fn activate(app: &mut DeckApp, mode: ModeId, c: Ctl) {
             ui.preset_sel = 0;
         }
         Ctl::Rec => app.session.toggle_record(mode),
+        Ctl::AutoRec => {
+            let ui = app.mode_ui(mode);
+            ui.mp.autorecord = !ui.mp.autorecord;
+            apply_knobs(app, mode);
+        }
         Ctl::Pause => {
             let s = &mut app.session.scan;
             s.phase = if s.phase == ScanPhase::Paused {
@@ -1306,7 +1324,10 @@ fn draw_readout(
             );
             for x in [x0, x1] {
                 p.line_segment(
-                    [egui::pos2(x, resp.rect.min.y), egui::pos2(x, resp.rect.max.y)],
+                    [
+                        egui::pos2(x, resp.rect.min.y),
+                        egui::pos2(x, resp.rect.max.y),
+                    ],
                     Stroke::new(1.0, th.accent.linear_multiply(0.7)),
                 );
             }

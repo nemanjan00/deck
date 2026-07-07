@@ -53,6 +53,8 @@ pub struct Knobs {
     pub record: Mutex<Option<std::path::PathBuf>>,
     /// RIFF INFO comment embedded in recordings (callsign/TG/mode/freq)
     pub rec_meta: Mutex<String>,
+    /// auto-record on signal/call
+    pub autorecord: AtomicBool,
 }
 
 pub fn f32_bits(v: f32) -> u32 {
@@ -79,6 +81,7 @@ impl Knobs {
             if_shift: AtomicI32::new(0),
             record: Mutex::new(None),
             rec_meta: Mutex::new(String::new()),
+            autorecord: AtomicBool::new(false),
         })
     }
 }
@@ -316,7 +319,13 @@ enum Detector {
 /// on its stdout), play it to the sink, and record it. This is where deck
 /// owns the digital-voice audio; the discriminator pump only feeds the
 /// decoder. Ends when the decoder's stdout closes.
-fn pump_decoded(mut stdout: impl Read, sink: Option<StdinSink>, knobs: Arc<Knobs>, tx: Sender<AppEvent>, run: u64) {
+fn pump_decoded(
+    mut stdout: impl Read,
+    sink: Option<StdinSink>,
+    knobs: Arc<Knobs>,
+    tx: Sender<AppEvent>,
+    run: u64,
+) {
     let mut buf = vec![0u8; 8192];
     let mut recorder: Option<crate::rec::WavWriter> = None;
     loop {
@@ -343,7 +352,12 @@ fn pump_decoded(mut stdout: impl Read, sink: Option<StdinSink>, knobs: Arc<Knobs
             }
             (None, true) => {
                 if let Some(w) = recorder.take() {
-                    let meta = knobs.rec_meta.lock().ok().map(|m| m.clone()).unwrap_or_default();
+                    let meta = knobs
+                        .rec_meta
+                        .lock()
+                        .ok()
+                        .map(|m| m.clone())
+                        .unwrap_or_default();
                     let _ = w.finalize(Some(&meta));
                 }
                 let _ = tx.send(AppEvent::Rec { run, path: None });
@@ -357,7 +371,12 @@ fn pump_decoded(mut stdout: impl Read, sink: Option<StdinSink>, knobs: Arc<Knobs
         }
     }
     if let Some(w) = recorder.take() {
-        let meta = knobs.rec_meta.lock().ok().map(|m| m.clone()).unwrap_or_default();
+        let meta = knobs
+            .rec_meta
+            .lock()
+            .ok()
+            .map(|m| m.clone())
+            .unwrap_or_default();
         let _ = w.finalize(Some(&meta));
         let _ = tx.send(AppEvent::Rec { run, path: None });
     }
@@ -740,7 +759,12 @@ format={ext}
             },
             (None, true) => {
                 if let Some(w) = recorder.take() {
-                    let meta = knobs.rec_meta.lock().ok().map(|m| m.clone()).unwrap_or_default();
+                    let meta = knobs
+                        .rec_meta
+                        .lock()
+                        .ok()
+                        .map(|m| m.clone())
+                        .unwrap_or_default();
                     let _ = w.finalize(Some(&meta));
                 }
                 let _ = tx.send(AppEvent::Rec { run, path: None });
@@ -780,7 +804,12 @@ format={ext}
         }
     }
     if let Some(w) = recorder.take() {
-        let meta = knobs.rec_meta.lock().ok().map(|m| m.clone()).unwrap_or_default();
+        let meta = knobs
+            .rec_meta
+            .lock()
+            .ok()
+            .map(|m| m.clone())
+            .unwrap_or_default();
         let _ = w.finalize(Some(&meta));
         let _ = tx.send(AppEvent::Rec { run, path: None });
     }

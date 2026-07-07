@@ -211,6 +211,8 @@ pub struct ModePersist {
     pub eq_low: f32,
     pub eq_mid: f32,
     pub eq_high: f32,
+    /// auto-record on signal/call (squelch-gated for analog, per-call for DV)
+    pub autorecord: bool,
     /// monitor audio toggle for decoder modes
     pub monitor: bool,
 }

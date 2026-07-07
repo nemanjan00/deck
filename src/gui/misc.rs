@@ -254,7 +254,10 @@ impl RecordingsState {
 pub fn draw_recordings(app: &mut DeckApp, ctx: &egui::Context) {
     let th = app.th.clone();
     app.status_bar(ctx, "Recordings", true);
-    app.hint_bar(ctx, "up/down select · OK play/stop · RIGHT delete · BACK menu");
+    app.hint_bar(
+        ctx,
+        "up/down select · OK play/stop · RIGHT delete · BACK menu",
+    );
     let sel = app.recordings.sel;
     let mut play: Option<usize> = None;
     let mut delete: Option<usize> = None;
@@ -284,8 +287,12 @@ pub fn draw_recordings(app: &mut DeckApp, ctx: &egui::Context) {
                         } else {
                             "IQ".to_string()
                         };
-                        let line =
-                            format!("{:<42} {:>8} {:>6}", e.name, crate::rec::fmt_size(e.bytes), dur);
+                        let line = format!(
+                            "{:<42} {:>8} {:>6}",
+                            e.name,
+                            crate::rec::fmt_size(e.bytes),
+                            dur
+                        );
                         let resp = ui.add(
                             egui::Label::new(
                                 RichText::new(line)
@@ -355,7 +362,8 @@ fn toggle_play(app: &mut DeckApp, i: usize) {
         return;
     };
     if !e.is_wav {
-        app.session.set_status("raw IQ capture — not playable as audio");
+        app.session
+            .set_status("raw IQ capture — not playable as audio");
         return;
     }
     let player = if app.session.tools.has("paplay") {
@@ -363,7 +371,8 @@ fn toggle_play(app: &mut DeckApp, i: usize) {
     } else if app.session.tools.has("aplay") {
         "aplay"
     } else {
-        app.session.set_status("no audio player found (paplay/aplay)");
+        app.session
+            .set_status("no audio player found (paplay/aplay)");
         return;
     };
     let cmd = format!("{player} '{}'", e.path.to_string_lossy());
@@ -386,7 +395,14 @@ fn delete_recording(app: &mut DeckApp, i: usize) {
     app.session.set_status("deleted");
 }
 
-pub fn recordings_keys(app: &mut DeckApp, esc: bool, enter: bool, up: bool, down: bool, right: bool) {
+pub fn recordings_keys(
+    app: &mut DeckApp,
+    esc: bool,
+    enter: bool,
+    up: bool,
+    down: bool,
+    right: bool,
+) {
     let n = app.recordings.entries.len();
     if up {
         app.recordings.sel = app.recordings.sel.saturating_sub(1);

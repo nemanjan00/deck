@@ -55,8 +55,8 @@ fn wav_comment(path: &Path) -> Option<String> {
             let end = (body + sz).min(data.len());
             while j + 8 <= end {
                 let sid = &data[j..j + 4];
-                let ssz =
-                    u32::from_le_bytes([data[j + 4], data[j + 5], data[j + 6], data[j + 7]]) as usize;
+                let ssz = u32::from_le_bytes([data[j + 4], data[j + 5], data[j + 6], data[j + 7]])
+                    as usize;
                 if sid == b"ICMT" {
                     let t = &data[j + 8..(j + 8 + ssz).min(data.len())];
                     let s = String::from_utf8_lossy(t)
@@ -194,7 +194,8 @@ impl WavWriter {
             extra = 8 + list_size;
         }
         self.f.seek(SeekFrom::Start(4))?;
-        self.f.write_all(&(36 + self.data_bytes + extra).to_le_bytes())?;
+        self.f
+            .write_all(&(36 + self.data_bytes + extra).to_le_bytes())?;
         self.f.seek(SeekFrom::Start(40))?;
         self.f.write_all(&self.data_bytes.to_le_bytes())?;
         self.f.flush()?;

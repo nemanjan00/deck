@@ -308,6 +308,9 @@ pub struct Session {
     pub stores: Stores,
     pub scan: ScanState,
     pub status: Option<(String, Instant)>,
+    /// auto-record state (true when tick started the current recording)
+    auto_rec: bool,
+    auto_rec_last: Instant,
     tx: Sender<AppEvent>,
     rx: Receiver<AppEvent>,
     run_counter: u64,
@@ -342,6 +345,8 @@ impl Session {
             stores: Stores::new(),
             scan,
             status: None,
+            auto_rec: false,
+            auto_rec_last: Instant::now(),
             tx,
             rx,
             run_counter: 0,
@@ -511,6 +516,7 @@ impl Session {
                     .tone_chz
                     .store((mp.tone * 100.0).round() as u32, Ordering::Relaxed);
                 knobs.if_shift.store(mp.if_shift, Ordering::Relaxed);
+                knobs.autorecord.store(mp.autorecord, Ordering::Relaxed);
                 let monitorable = audio_out || decoder_cmd.is_some();
                 // Voice decoders emit decoded audio (deck plays it): play by
                 // default. Analog plays when audio_out; other decoders (pager/
@@ -863,7 +869,65 @@ impl Session {
         }
 
         self.update_rec_meta();
+        self.tick_autorecord(now);
         self.tick_scanner(now);
+    }
+
+    /// Drive recording automatically: start on signal/call, stop after it
+    /// clears. Each event yields its own auto-named (metadata-tagged) file.
+    fn tick_autorecord(&mut self, now: Instant) {
+        let (knobs, is_iq, mode, freq) = match self.running.as_ref() {
+            Some(r) => (
+                r.knobs.clone(),
+                matches!(r.backend, Backend::Iq(_)),
+                r.mode,
+                r.freq_hz,
+            ),
+            None => {
+                self.auto_rec = false;
+                return;
+            }
+        };
+        if !knobs.autorecord.load(Ordering::Relaxed) {
+            if self.auto_rec {
+                if let Ok(mut g) = knobs.record.lock() {
+                    *g = None;
+                }
+                self.auto_rec = false;
+            }
+            return;
+        }
+        if !is_iq {
+            return; // external pipelines (ADS-B) aren't deck-recordable
+        }
+        let signal = if mode_def(mode).view == ViewKind::Voice {
+            self.stores.call.is_some()
+        } else {
+            let sq = bits_f32(knobs.squelch.load(Ordering::Relaxed)).max(0.02);
+            now.duration_since(self.stores.last_rms_at) < Duration::from_millis(400)
+                && self.stores.audio_rms > sq
+        };
+        if signal {
+            self.auto_rec_last = now;
+        }
+        let recording = self.stores.rec_path.is_some();
+        if signal && !recording {
+            let dir = crate::rec::recordings_dir(&self.cfg.audio.record_dir);
+            let name = crate::rec::recording_filename(mode_def(mode).key, freq);
+            if let Ok(mut g) = knobs.record.lock() {
+                *g = Some(dir.join(name));
+            }
+            self.auto_rec = true;
+        } else if self.auto_rec
+            && recording
+            && !signal
+            && now.duration_since(self.auto_rec_last) > Duration::from_millis(2500)
+        {
+            if let Ok(mut g) = knobs.record.lock() {
+                *g = None;
+            }
+            self.auto_rec = false;
+        }
     }
 
     /// Keep the recordings' embedded metadata (RIFF INFO comment) current:
@@ -1041,6 +1105,7 @@ impl Session {
             mp.det = u8::from(k.sync_det.load(Ordering::Relaxed));
             mp.tone = k.tone_chz.load(Ordering::Relaxed) as f32 / 100.0;
             mp.if_shift = k.if_shift.load(Ordering::Relaxed);
+            mp.autorecord = k.autorecord.load(Ordering::Relaxed);
             if r.monitorable {
                 mp.monitor = !k.mute.load(Ordering::Relaxed);
             }
