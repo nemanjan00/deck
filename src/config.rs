@@ -13,6 +13,7 @@ pub struct Config {
     pub audio: AudioCfg,
     pub adsb: AdsbCfg,
     pub scanner: ScanCfg,
+    pub sweep: SweepCfg,
     /// extra frequency presets per mode key, appended to built-ins
     pub presets: HashMap<String, Vec<Chan>>,
     /// decoder command overrides per mode key (stdin s16le audio decoders)
@@ -104,6 +105,24 @@ impl Default for AdsbCfg {
 pub struct Chan {
     pub label: String,
     pub hz: u64,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(default)]
+pub struct SweepCfg {
+    /// search-between-limits range for the waterfall SWEEP function
+    pub from: u64,
+    pub to: u64,
+    pub dwell_ms: u64,
+}
+impl Default for SweepCfg {
+    fn default() -> Self {
+        Self {
+            from: 430_000_000,
+            to: 440_000_000,
+            dwell_ms: 1200,
+        }
+    }
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]

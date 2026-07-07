@@ -1,6 +1,7 @@
 //! deck — handheld ham-radio RX machine for SDR cyberdecks.
 
 mod audio;
+mod bands;
 mod config;
 mod device;
 mod doctor;

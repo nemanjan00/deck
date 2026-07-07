@@ -40,6 +40,8 @@ pub enum Ctl {
     Tone,
     /// SSB passband shift
     IfShift,
+    /// waterfall search-between-limits
+    Sweep,
 }
 
 fn controls_for(mode: ModeId) -> Vec<Ctl> {
@@ -78,6 +80,7 @@ fn controls_for(mode: ModeId) -> Vec<Ctl> {
         }
         if mode == ModeId::Waterfall {
             v.push(Ctl::Span);
+            v.push(Ctl::Sweep);
             v.push(Ctl::Rec);
             v.push(Ctl::OpenIn);
         }
@@ -166,6 +169,7 @@ fn ctl_label(c: Ctl) -> &'static str {
         Ctl::MemSave => "MEMORY",
         Ctl::Tone => "CTCSS",
         Ctl::IfShift => "IF SHIFT",
+        Ctl::Sweep => "SWEEP",
     }
 }
 
@@ -280,6 +284,20 @@ fn ctl_value(app: &DeckApp, mode: ModeId, c: Ctl) -> String {
                 format!("{:+} Hz", mp.if_shift)
             }
         }
+        Ctl::Sweep => match &app.sweep {
+            Some(sw) => format!(
+                "{}%",
+                (sw.idx * 100) / sw.centers.len().max(1)
+            ),
+            None => {
+                let c = &app.session.cfg.sweep;
+                format!(
+                    "{}–{}",
+                    crate::freq::fmt_short(c.from),
+                    crate::freq::fmt_short(c.to)
+                )
+            }
+        },
     }
 }
 
@@ -412,6 +430,51 @@ fn activate(app: &mut DeckApp, mode: ModeId, c: Ctl) {
             ui.openin_sel = 0;
         }
         Ctl::Span => adjust(app, mode, Ctl::Span, 1),
+        Ctl::Sweep => {
+            if app.sweep.take().is_some() {
+                app.session.set_status("sweep stopped");
+            } else if app.running_mode() != Some(mode) {
+                app.session.set_status("start RX first, then sweep");
+            } else {
+                let c = app.session.cfg.sweep.clone();
+                let rate = app
+                    .session
+                    .running
+                    .as_ref()
+                    .map(|r| r.rate)
+                    .filter(|r| *r > 0)
+                    .unwrap_or(2_400_000) as u64;
+                let step = rate * 4 / 5; // 20% overlap
+                let mut centers = Vec::new();
+                let mut hz = c.from.min(c.to) + rate / 2;
+                let to = c.from.max(c.to);
+                while hz < to {
+                    centers.push(hz);
+                    hz += step;
+                }
+                if centers.is_empty() {
+                    centers.push(c.from);
+                }
+                app.session.stores.peaks.clear();
+                let first = centers[0];
+                app.mode_ui(mode).freq.hz = first;
+                if let Err(e) = app.session.retune(first) {
+                    app.session.set_status(e);
+                }
+                let n = centers.len();
+                app.sweep = Some(super::Sweep {
+                    centers,
+                    idx: 0,
+                    next_at: Instant::now()
+                        + std::time::Duration::from_millis(
+                            app.session.cfg.sweep.dwell_ms.max(400),
+                        ),
+                    results: Vec::new(),
+                });
+                app.session
+                    .set_status(format!("sweeping {n} segments…"));
+            }
+        }
         Ctl::MemSave => {
             let hz = app.mode_ui(mode).freq.hz;
             let key = mode_def(mode).key.to_string();
@@ -1193,6 +1256,28 @@ fn draw_readout(
         .map(|s| s.iter().fold(f32::MIN, |a, &b| a.max(b)))
         .unwrap_or(-80.0);
     let p = ui.painter();
+    // band-plan strips along the bottom edge of the scope
+    let low = w.low_hz.max(0.0) as u64;
+    let high = (w.low_hz + w.span_hz).max(0.0) as u64;
+    for band in crate::bands::in_range(low, high) {
+        let x0 = ((band.from.max(low) - low) as f64 / w.span_hz) as f32;
+        let x1 = ((band.to.min(high) - low) as f64 / w.span_hz) as f32;
+        let y1 = resp.rect.max.y;
+        let strip = egui::Rect::from_min_max(
+            egui::pos2(resp.rect.min.x + x0 * resp.rect.width(), y1 - 4.0),
+            egui::pos2(resp.rect.min.x + x1 * resp.rect.width(), y1),
+        );
+        p.rect_filled(strip, 0.0, th.accent2.linear_multiply(0.5));
+        if strip.width() > 34.0 {
+            p.text(
+                strip.left_top() + egui::vec2(2.0, -2.0),
+                Align2::LEFT_BOTTOM,
+                band.label,
+                FontId::proportional(9.0),
+                th.text_faint,
+            );
+        }
+    }
     p.text(
         resp.rect.left_top() + egui::vec2(8.0, 6.0),
         Align2::LEFT_TOP,

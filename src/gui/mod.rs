@@ -122,6 +122,15 @@ pub struct DeckApp {
     nav_cooldown: u8,
     /// last-frame menu grid width, so d-pad up/down knows the geometry
     menu_cols: usize,
+    /// active band sweep (waterfall search-between-limits)
+    pub sweep: Option<Sweep>,
+}
+
+pub struct Sweep {
+    pub centers: Vec<u64>,
+    pub idx: usize,
+    pub next_at: Instant,
+    pub results: Vec<(u64, f32)>,
 }
 
 impl DeckApp {
@@ -153,6 +162,7 @@ impl DeckApp {
             support_dev: usize::MAX,
             nav_cooldown: 0,
             menu_cols: 4,
+            sweep: None,
             session,
         };
         app.refresh_support();
@@ -287,6 +297,51 @@ impl DeckApp {
                 self.stop_rx();
                 self.start_rx(mode);
                 self.session.set_status("restarted with new gain");
+            }
+        }
+
+        // band sweep: harvest peaks, march the tuned frequency
+        if let Some(mut sw) = self.sweep.take() {
+            let running_wf = self.running_mode() == Some(ModeId::Waterfall);
+            if !running_wf {
+                self.session.set_status("sweep cancelled");
+            } else {
+                for p in &self.session.stores.peaks {
+                    if !sw.results.iter().any(|(hz, _)| hz.abs_diff(p.hz) < 8_000) {
+                        sw.results.push((p.hz, p.db));
+                    }
+                }
+                if now >= sw.next_at {
+                    sw.idx += 1;
+                    if sw.idx >= sw.centers.len() {
+                        // done: publish the full catch into the peak browser
+                        sw.results
+                            .sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
+                        self.session.stores.peaks = sw
+                            .results
+                            .iter()
+                            .take(24)
+                            .map(|(hz, db)| crate::session::Peak {
+                                hz: *hz,
+                                db: *db,
+                                last: now + Duration::from_secs(600),
+                            })
+                            .collect();
+                        self.session
+                            .set_status(format!("sweep done — {} signals", sw.results.len()));
+                    } else {
+                        let hz = sw.centers[sw.idx];
+                        self.mode_ui(ModeId::Waterfall).freq.hz = hz;
+                        if let Err(e) = self.session.retune(hz) {
+                            self.session.set_status(e);
+                        }
+                        sw.next_at = now
+                            + Duration::from_millis(self.session.cfg.sweep.dwell_ms.max(400));
+                        self.sweep = Some(sw);
+                    }
+                } else {
+                    self.sweep = Some(sw);
+                }
             }
         }
 
