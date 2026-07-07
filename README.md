@@ -193,6 +193,11 @@ wget https://github.com/nemanjan00/deck/releases/download/continuous/deck-aarch6
 chmod +x deck-aarch64.AppImage && ./deck-aarch64.AppImage
 ```
 
+The `continuous` prerelease also carries the **bare `deck-<arch>` binary**
+(published as soon as it builds, so it's there even while the AppImage bakes)
+— download it, `chmod +x`, and `apt install` the decode tools, or just drive
+the Simulator.
+
 **The AppImage bundles the decode tools** — rtl_sdr, multimon-ng, sox,
 minimodem, hackrf, airspyhf, dsd-neo, rtl_ais, dump1090 are all inside, so
 every mode works from one download. Two things stay on the host (both on Pi

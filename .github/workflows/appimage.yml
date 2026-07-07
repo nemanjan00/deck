@@ -44,6 +44,21 @@ jobs:
       - name: Build deck (release)
         run: cargo build --release
 
+      # Publish the bare binary to `continuous` right away, so there is always
+      # something downloadable even if the (heavier) AppImage build below
+      # fails. Bare binary needs the decode tools apt-installed on the host.
+      - name: Publish bare binary to continuous (main)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp target/release/deck "deck-${{ matrix.arch }}"
+          gh release view continuous >/dev/null 2>&1 || \
+            gh release create continuous --prerelease \
+              --title "continuous (latest main)" \
+              --notes "Rolling build of main." || true
+          gh release upload continuous "deck-${{ matrix.arch }}" --clobber
+
       - name: Build AppImage (bundles decode tools)
         run: ci/build-appimage.sh ${{ matrix.arch }}
 
@@ -72,8 +87,8 @@ jobs:
           Host still needs: GL/GLES + libxkbcommon + pulse/pipewire (Pi OS desktop has all three), and RTL-SDR USB permissions — see packaging/70-deck-sdr.rules. \`deck doctor\` checks both."
           gh release view continuous >/dev/null 2>&1 || \
             gh release create continuous --prerelease \
-              --title "continuous (latest main)" --notes "$NOTES"
-          gh release edit continuous --notes "$NOTES"
+              --title "continuous (latest main)" --notes "$NOTES" || true
+          gh release edit continuous --notes "$NOTES" || true
           gh release upload continuous "deck-${{ matrix.arch }}.AppImage" --clobber
 
       - name: Attach to tagged release
